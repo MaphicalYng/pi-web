@@ -20,6 +20,8 @@ import { MarkdownBody } from "./MarkdownBody";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { ExtensionStatusBar } from "./ExtensionStatusBar";
+import { ChatExtensionOverlays, selectChatOverlays } from "./ChatExtensionOverlays";
+import { ChatGitBranch } from "./ChatGitBranch";
 import { AnsiText } from "./AnsiText";
 import { useI18n } from "@/hooks/useI18n";
 import { phaseLabel } from "@/lib/chat-phase-label";
@@ -319,6 +321,12 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   const hasStreamingContent = useStreamingSelector(streamingStore, selectHasStreamingContent);
   const getStreamingMessage = useCallback(() => streamingStore.getState().streamingMessage, [streamingStore]);
   const sessionBusy = agentRunning || bashRunning;
+  // The two live overlays above the composer, and what the shelf still shows:
+  // both target keys leave the shelf whether or not their overlay is visible.
+  const chatOverlays = useMemo(
+    () => selectChatOverlays(extensionStatuses, extensionWidgets),
+    [extensionStatuses, extensionWidgets],
+  );
   // While this session's run is under way its chime may come with the phone
   // locked, where a suspended context cannot start again (#1157).
   useEffect(() => {
@@ -1076,6 +1084,8 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
         <NoticeShelf notices={notices} floating onPauseChange={setNoticePaused} />
       </div>
 
+      <ChatGitBranch cwd={messageCwd} refreshKey={agentRunning} />
+
       <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
         {extensionDialog && (
           <ExtensionDialog key={extensionDialog.id} request={extensionDialog} waitingCount={waitingExtensionDialogCount} onRespond={respondToExtensionUi} />
@@ -1513,12 +1523,24 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
           </div>
         )}
         {chatInputElement}
-        <ExtensionStatusBar
-          statuses={extensionStatuses}
-          widgets={extensionWidgets}
-          onCommand={handleSend}
-          commandsDisabled={sessionBusy}
-        />
+        {/* The dock: the live overlays above the composer, then the extension status
+            shelf. One wrapper keeps its stacking context together (.chat-extension-dock
+            in app/globals.css). */}
+        <div className="chat-extension-dock">
+          <ChatExtensionOverlays
+            backgroundTaskText={chatOverlays.backgroundTaskText}
+            todos={chatOverlays.todos}
+            sessionId={session?.id}
+            scrollRootRef={scrollContainerRef}
+            messageColumnRef={messageContentRef}
+          />
+          <ExtensionStatusBar
+            statuses={chatOverlays.remainingStatuses}
+            widgets={chatOverlays.remainingWidgets}
+            onCommand={handleSend}
+            commandsDisabled={sessionBusy}
+          />
+        </div>
       </div>
       {isEmptyNew && <div className="min-h-0 flex-1" />}
     </div>

@@ -45,6 +45,17 @@ function toGitPath(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
 
+// The work tree's current branch, for display only. A detached HEAD prints nothing
+// and a repository without commits still names its unborn branch; either way the
+// answer is read, never written. A failure here must not cost the changed files.
+async function readCurrentBranch(repositoryRoot: string): Promise<string | null> {
+  try {
+    return (await git(repositoryRoot, ["branch", "--show-current"])).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 async function readStatusEntries(
   repositoryRoot: string,
   gitConfig: readonly string[] = [],
@@ -110,6 +121,7 @@ export async function getGitStatus(cwd: string): Promise<GitStatusResponse> {
     return {
       isGitRepository: false,
       repositoryRoot: null,
+      branch: null,
       files: [],
       additions: 0,
       deletions: 0,
@@ -121,9 +133,10 @@ export async function getGitStatus(cwd: string): Promise<GitStatusResponse> {
   // report each file under the cwd as given, the way the file tree lists it.
   const realRoot = resolveExistingPath(repositoryRoot);
   const realCwd = resolveExistingPath(cwd);
-  const [entries, trackedLineStats] = await Promise.all([
+  const [entries, trackedLineStats, branch] = await Promise.all([
     readStatusEntries(repositoryRoot),
     readTrackedLineStats(realRoot, realCwd),
+    readCurrentBranch(repositoryRoot),
   ]);
   const files = entries.flatMap((entry): GitFileStatus[] => {
     const realFilePath = path.resolve(realRoot, entry.path);
@@ -145,6 +158,7 @@ export async function getGitStatus(cwd: string): Promise<GitStatusResponse> {
   return {
     isGitRepository: true,
     repositoryRoot,
+    branch,
     files,
     additions: trackedLineStats.additions + untrackedAdditions,
     deletions: trackedLineStats.deletions,

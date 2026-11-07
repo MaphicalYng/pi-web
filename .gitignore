@@ -30,6 +30,7 @@
 *.pem
 /.pi/
 /.agents/
+/.pi/
 /skills-lock.json
 
 # debug

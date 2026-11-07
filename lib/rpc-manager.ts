@@ -22,6 +22,7 @@ import { computeLiveSessionTotalActiveMs } from "./session-timing";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { notifySessionComplete } from "./web-push";
 import { hasActiveSessionLivenessProvider } from "./session-liveness";
+import type { BackgroundTaskHostBridge, BackgroundTaskHostClient } from "./background-task-host-client";
 import type { SlashCommandInfo } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionLike, ExtensionUiContextLike, ToolInfo } from "./pi-types";
 import type {
@@ -174,6 +175,8 @@ type AgentSessionWrapperOptions = {
   onDirectTurnSettled?: (aborted: boolean) => void;
   /** Connects the session's MCP servers before a prompt starts a run, and lets go of them when it closes (lib/mcp-host.ts). */
   mcpHost?: WrapperMcpHost;
+  /** The session's read-only bridge to pi-background-tasks' Host API (lib/background-task-host-client.ts); a normal session only. */
+  backgroundTaskHost?: BackgroundTaskHostBridge;
   /** Chat only: the extension-provided model the session wanted, named when a prompt finds no model. */
   chatOnlyExtensionModel?: { provider: string; id: string };
   sideChat?: boolean;
@@ -362,6 +365,8 @@ export class AgentSessionWrapper {
   private readonly mcpHost?: WrapperMcpHost;
   private readonly chatOnlyExtensionModel?: { provider: string; id: string };
   private readonly sideChat: boolean;
+  private readonly backgroundTaskHost?: BackgroundTaskHostBridge;
+  private backgroundTaskHostDisposed = false;
   private mcpHostDisposed = false;
   // The MCP wait of the prompt being admitted; Stop ends it.
   private mcpPromptWait: { controller: AbortController; done: Promise<void> } | null = null;
@@ -404,10 +409,19 @@ export class AgentSessionWrapper {
     this.mcpHost = options.mcpHost;
     this.chatOnlyExtensionModel = options.chatOnlyExtensionModel;
     this.sideChat = options.sideChat === true;
+    this.backgroundTaskHost = options.backgroundTaskHost;
   }
 
   get sessionId(): string {
     return this.inner.sessionId;
+  }
+
+  /**
+   * The session's read-only pi-background-tasks client, when its built-ins carried
+   * the bridge (a normal session only). Undefined before extensions load.
+   */
+  getBackgroundTaskHostClient(): BackgroundTaskHostClient | undefined {
+    return this.backgroundTaskHost?.getClient();
   }
 
   get sessionFile(): string {
@@ -1731,11 +1745,26 @@ export class AgentSessionWrapper {
     }
   }
 
+  /**
+   * Once, before the wrapper closes: the bridge releases the panel's lease and drops
+   * its event listeners, so nothing of the Host's is left attached to this session.
+   */
+  private disposeBackgroundTaskHost(): void {
+    if (this.backgroundTaskHostDisposed) return;
+    this.backgroundTaskHostDisposed = true;
+    try {
+      this.backgroundTaskHost?.dispose();
+    } catch (error) {
+      console.error("[pi-web] background task host dispose failed:", error instanceof Error ? error.message : error);
+    }
+  }
+
   destroy(): void {
     if (!this._alive) return;
     this._alive = false;
     this.closingAt ??= Date.now();
     this.disposeMcpHost();
+    this.disposeBackgroundTaskHost();
     // Tell attached SSE listeners to drop this instance so the browser
     // EventSource errors and reconnects instead of staying OPEN on a dead wrapper.
     this.emit({ type: "session_shutdown" });
@@ -3364,6 +3393,7 @@ export async function startRpcSession(
         ? { onDirectTurnSettled: (aborted: boolean) => SUBAGENT_CONTROLLER.settleDirectTurn(inner.sessionId, aborted) }
         : {}),
       ...(mcpHost ? { mcpHost } : {}),
+      ...(builtins?.backgroundTaskHost ? { backgroundTaskHost: builtins.backgroundTaskHost } : {}),
       ...(chatOnlyExtensionModel ? { chatOnlyExtensionModel } : {}),
       sideChat: isSideChat,
     });
