@@ -17,6 +17,8 @@ export interface GitFileStatus {
 export interface GitStatusResponse {
   isGitRepository: boolean;
   repositoryRoot: string | null;
+  /** The current branch's full name; null outside Git, on a detached HEAD, or when it cannot be read. */
+  branch: string | null;
   files: GitFileStatus[];
   additions: number;
   deletions: number;

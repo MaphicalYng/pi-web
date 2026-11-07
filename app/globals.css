@@ -2058,6 +2058,97 @@ pre, code {
   }
 }
 
+/* The session's Git branch: a read-only label in normal flow at the top of
+   the chat, so it never covers a message or the composer. A branch switched
+   elsewhere in a terminal is picked up on the window's next focus. */
+.chat-git-branch-row {
+  display: flex;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 6px 16px 0;
+}
+
+.chat-git-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.chat-git-branch-icon {
+  flex: none;
+  opacity: 0.8;
+}
+
+/* The full name is kept, ellipsis or abbreviation would change what the
+   operator reads: a long name scrolls inside the pill instead. */
+.chat-git-branch-name {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+
+.chat-git-branch-name::-webkit-scrollbar {
+  display: none;
+}
+
+/* The live extension overlays (background tasks, rpiv-todos) sit just above
+   the composer, anchored to its relative container: they may cover messages,
+   never the input, and scroll on their own once the list outgrows the box. */
+.chat-extension-overlays {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 8px);
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  width: min(420px, calc(100% - 32px));
+  max-height: min(42vh, 360px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.chat-extension-overlay {
+  flex: none;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--text) 12%, transparent);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 640px) {
+  .chat-extension-overlays {
+    left: 8px;
+    width: calc(100% - 16px);
+    max-height: 35vh;
+  }
+}
+
 /* The empty new-session page's header above the composer (ChatWindow), on
    the composer's left edge: the brand (the logo, "Pi Web" and its versions
    line), then the project and worktree row (NewSessionContextBar) right
@@ -2964,6 +3055,11 @@ span.token.table {
    leaves them enough height. */
 @media (max-width: 640px), (pointer: coarse) and (max-height: 500px) {
   html[data-keyboard-open] .extension-status-shelf {
+    display: none !important;
+  }
+  /* The floating overlays sit right above the composer too, where a phone's
+     keyboard leaves almost no room: the conversation keeps it. */
+  html[data-keyboard-open] .chat-extension-overlays {
     display: none !important;
   }
   /* Except while its model picker is open: the picker's filter is the field
