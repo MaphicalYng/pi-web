@@ -3,7 +3,8 @@ import typescript from "eslint-config-next/typescript";
 
 const eslintConfig = [
   // demo/ is a separate Next.js project with its own lint config.
-  { ignores: ["demo/**"] },
+  // dist/ and release/ are desktop packaging output (npm run build:desktop).
+  { ignores: ["demo/**", "dist/**", "release/**", ".pi/**"] },
   ...coreWebVitals,
   ...typescript,
   {

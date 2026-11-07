@@ -10,11 +10,13 @@ const jiti = createJiti(import.meta.url, {
   moduleCache: false,
 });
 const { GET, POST, DELETE } = await jiti.import("./route.ts");
+const desktopAuth = await jiti.import("../../../lib/desktop-auth.ts");
 const { recordAuthSuccess } = await import("../../../lib/auth-throttle.ts");
 
 before(() => { process.env.PI_WEB_PASSWORD = "correct horse battery staple"; });
 beforeEach(() => { recordAuthSuccess(); });
 after(() => {
+  desktopAuth.clearDesktopAuthContext();
   recordAuthSuccess();
   if (originalPassword === undefined) delete process.env.PI_WEB_PASSWORD;
   else process.env.PI_WEB_PASSWORD = originalPassword;
@@ -83,4 +85,36 @@ test("rejects cross-origin login attempts", async () => {
     { Origin: "https://attacker.example", "Sec-Fetch-Site": "cross-site" },
   ));
   assert.equal(response.status, 403);
+});
+
+test("desktop mode keeps the Web password matrix without touching the shell cookie", async () => {
+  const secret = "ab".repeat(32);
+  desktopAuth.setDesktopAuthContext({ enabled: true, secret, origin: "http://127.0.0.1:49152" });
+  try {
+    let response = await GET(request("GET"));
+    assert.deepEqual(await response.json(), { enabled: true, authenticated: false });
+
+    response = await POST(request("POST", { password: "wrong" }));
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.get("retry-after"), "1");
+    assert.equal(response.headers.has("set-cookie"), false);
+
+    recordAuthSuccess();
+    response = await POST(request("POST", { password: "correct horse battery staple" }));
+    assert.equal(response.status, 200);
+    const cookie = response.headers.get("set-cookie");
+    assert.match(cookie, /^pi_web_session=v1\./);
+    assert.doesNotMatch(cookie, /__pi-web-session/);
+
+    response = await GET(request("GET", undefined, { Cookie: cookie.split(";", 1)[0] }));
+    assert.deepEqual(await response.json(), { enabled: true, authenticated: true });
+
+    response = await DELETE(request("DELETE", undefined, { Cookie: `__pi-web-session=${secret}` }));
+    assert.equal(response.status, 200);
+    // Only the Web-session cookie is cleared; the shell's cookie is untouched.
+    assert.match(response.headers.get("set-cookie"), /pi_web_session=;/);
+    assert.doesNotMatch(response.headers.get("set-cookie"), /__pi-web-session=/);
+  } finally {
+    desktopAuth.clearDesktopAuthContext();
+  }
 });

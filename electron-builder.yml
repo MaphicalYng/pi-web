@@ -1,0 +1,56 @@
+# Electron packaging for the Pi Web desktop shell.
+#
+# The frozen layout (desktop/main/index.ts, desktop/server/config.ts) reads:
+#   Resources/backend/desktop/server/index.js   the utilityProcess entry
+#   Resources/backend/next-standalone           the Next standalone root
+#   Resources/backend/lib/*.js                  the desktop env/auth modules
+#
+# The whole backend therefore stays outside the asar: Next's standalone tree
+# carries its own node_modules, dynamic SDK imports and the node-pty prebuild,
+# none of which survive a packed asar.
+
+appId: dev.piweb.desktop
+productName: Pi Web
+copyright: MIT
+
+electronVersion: 45.2.2
+
+directories:
+  app: dist/desktop/app
+  output: release
+  buildResources: resources
+
+# Only the compiled shell (main/preload/shared) is packed; the backend is
+# extraResources so it keeps real paths.
+files:
+  - "**/*"
+
+extraResources:
+  - from: dist/desktop/backend
+    to: backend
+
+asar: true
+npmRebuild: false
+buildDependenciesFromSource: false
+
+# No signing, no notarization, no auto-update: macOS arm64 only.
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  category: public.app-category.developer-tools
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  icon: resources/icon.png
+  extendInfo:
+    NSHumanReadableCopyright: MIT
+    LSMinimumSystemVersion: "12.0"
+
+dmg:
+  title: Pi Web
+  writeUpdateInfo: false
+  sign: false
+
+publish: null

@@ -105,6 +105,39 @@ $env:NO_PROXY = "localhost,127.0.0.1"
 npx @agegr/pi-web@latest
 ```
 
+## 桌面应用（macOS）
+
+Pi Web 也提供 macOS 桌面应用：同一个界面运行在 Electron 窗口里，本地服务随应用一起打包，因此不需要另开 `pi-web` 进程，也不需要安装 Node.js。桌面应用与浏览器版读写同一个智能体目录，在两者之间切换无需迁移。
+
+**系统要求**：Apple 芯片、macOS 12（Monterey）或更高版本。构建未签名，以 DMG 形式由本仓库的桌面构建产出，不通过包管理器分发。
+
+**安装**：
+
+1. 打开 DMG，把 **Pi Web** 拖入 `应用程序`。
+2. 由于应用未签名也未公证，首次启动会被 Gatekeeper 拦截。右键点击应用，选择 **打开**，再确认 **打开**；或执行一次下面的命令清除隔离标记：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Pi Web.app"
+```
+
+之后正常双击即可启动。升级时用新的 DMG 覆盖旧应用（见下方限制）。
+
+**共享数据**：会话、模型配置、凭据、技能、插件和 MCP 服务器都留在 `~/.pi/agent`（或 `PI_CODING_AGENT_DIR`），与浏览器版和 pi CLI 完全一致，因此在应用里开始的会话可以在 CLI 或浏览器里继续。应用自身的日志写在 `~/Library/Logs/Pi Web/`（`main.log`，可从应用菜单打开），不会把智能体数据复制到单独的数据库。
+
+**开发**：
+
+```bash
+npm run dev            # 开发服务器，127.0.0.1:30141
+npm run build:desktop  # 生成 dist/desktop，随后产出 release/mac-arm64/Pi Web.app 与 DMG
+npm run smoke:desktop  # 启动打包后的应用，检查目录布局、安全防护和退出流程
+```
+
+未打包的调试启动会复用 30141 端口上已有的健康服务，只有该端口空闲时才自己启动一个 `npm run dev`；端口被其他程序占用时直接报错，而不会另起第二个服务。
+
+**关闭**最后一个窗口即退出应用，不会有 agent 在后台悄悄继续运行；若仍有回合在跑，会先弹确认框。应用没有菜单栏常驻或托盘模式。外壳、安全边界和打包布局见[桌面端说明](./agents/desktop.md)。
+
+**当前限制**：仅提供 macOS arm64 版本；未签名、未公证；没有自动更新（用新 DMG 覆盖安装）；没有菜单栏常驻或托盘模式；没有 Windows 与 Linux 版本。插件和技能安装使用 `PATH` 中的 `npm` / `npx`，应用不自带。
+
 ## 注意事项
 
 - **智能体数据**：Pi Web 默认读取 `~/.pi/agent` 下的 pi 数据，包括 `sessions/<编码后的工作目录>/<时间戳>_<uuid>.jsonl` 中的会话文件。可通过 `PI_CODING_AGENT_DIR` 指定其他 pi agent 目录。
@@ -143,6 +176,7 @@ hooks/           客户端状态和交互 hooks
 lib/             会话、智能体、模型、文件、Git 和安全逻辑
 public/          静态资源和 PWA 文件
 bin/             npm CLI 入口及启动参数解析
+desktop/         Electron 外壳：主进程、preload、后端入口、打包脚本
 docs/            面向用户和贡献者的专题文档
 demo/            发布到 GitHub Pages 的静态演示站（见 demo/README.md）
 ```

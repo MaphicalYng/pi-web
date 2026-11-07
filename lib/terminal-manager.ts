@@ -3,6 +3,7 @@ import { homedir } from "os";
 import type { IPty } from "node-pty";
 import { getPowerShellConfig } from "@earendil-works/pi-coding-agent";
 import { samePath } from "./paths";
+import { isDesktopPrivateEnvName } from "./desktop-env";
 import type { DebugServerGlobal } from "./debug-types";
 
 export type TerminalEvent =
@@ -49,19 +50,32 @@ function registry(): Map<string, TerminalRecord> {
   return globalThis.__piWebTerminals;
 }
 
-function shellEnvironment(): Record<string, string> {
+/**
+ * The shell's environment: this process's, minus the desktop host's own
+ * variables (the browser password and the desktop session, plus
+ * `PI_WEB_DESKTOP*`). Pure, so the canary test needs no PTY.
+ */
+export function terminalEnvironment(
+  base: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform = process.platform,
+): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    // The browser login password guards this server, not the shells it starts.
-    const comparableKey = process.platform === "win32" ? key.toUpperCase() : key;
-    if (value !== undefined && comparableKey !== "PI_WEB_PASSWORD") env[key] = value;
+  for (const [key, value] of Object.entries(base)) {
+    if (typeof value !== "string") continue;
+    const comparableKey = platform === "win32" ? key.toUpperCase() : key;
+    if (isDesktopPrivateEnvName(comparableKey, platform)) continue;
+    env[key] = value;
   }
   env.TERM = "xterm-256color";
   env.COLORTERM = "truecolor";
   // Windows shells (Git Bash / MSYS2, cmd, PowerShell) otherwise inherit the
   // system ANSI codepage (e.g. GBK on zh-CN) and mangle non-ASCII filenames.
-  if (!process.env.LANG && !process.env.LC_ALL && !process.env.LC_CTYPE) env.LANG = "C.UTF-8";
+  if (!base.LANG && !base.LC_ALL && !base.LC_CTYPE) env.LANG = "C.UTF-8";
   return env;
+}
+
+function shellEnvironment(): Record<string, string> {
+  return terminalEnvironment(process.env);
 }
 
 /**
@@ -85,11 +99,16 @@ function scheduleCleanup(id: string, record: TerminalRecord): void {
   if (record.cleanupTimer || record.listeners.size || registry().get(id) !== record) return;
   record.cleanupAt = Date.now() + TERMINAL_RECONNECT_MS;
   record.cleanupTimer = setTimeout(() => killTerminal(id), TERMINAL_RECONNECT_MS);
-  record.cleanupTimer.unref?.();
+  unrefTimer(record.cleanupTimer);
 }
 
 function dimension(value: number, fallback: number): number {
   return Math.min(1000, Math.max(2, Number.isFinite(value) ? Math.floor(value) : fallback));
+}
+
+/** Coalesces a timer, typing it structurally because setTimeout's type varies by runtime. */
+function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
+  (timer as { unref?: () => void }).unref?.();
 }
 
 export function createTerminal(cwd: string, cols: number, rows: number, id: string = randomUUID()): string {
@@ -136,12 +155,12 @@ export function createTerminal(cwd: string, cols: number, rows: number, id: stri
   // Includes creations whose response or initial SSE connection never arrives.
   scheduleCleanup(id, record);
 
-  pty.onData((data) => {
+  pty.onData((data: string) => {
     record.backlog = (record.backlog + data).slice(-MAX_BACKLOG);
     record.offset += data.length;
     emit(record, { type: "output", data, offset: record.offset });
   });
-  pty.onExit(({ exitCode }) => {
+  pty.onExit(({ exitCode }: { exitCode: number }) => {
     if (record.cleanupTimer) clearTimeout(record.cleanupTimer);
     record.cleanupTimer = null;
     record.cleanupAt = null;
@@ -241,10 +260,26 @@ export function killTerminal(id: string, force = false): boolean {
       record.cleanupTimer = setTimeout(() => {
         if (!record.exited) record.pty.kill("SIGKILL");
       }, 2000);
-      record.cleanupTimer.unref?.();
+      unrefTimer(record.cleanupTimer);
     }
   }
   emit(record, { type: "closed" });
   record.listeners.clear();
   return true;
+}
+
+/**
+ * Kills every terminal and its PTY, for an embedder that exits on purpose (the
+ * desktop server). node-pty reaps the shell asynchronously, so this waits one
+ * short turn before reporting the count.
+ */
+export async function releaseAllTerminals(timeoutMs = 1_500): Promise<number> {
+  const ids = Array.from(registry().keys());
+  for (const id of ids) killTerminal(id, true);
+  if (ids.length === 0) return 0;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, Math.min(250, Math.max(1, timeoutMs)));
+    unrefTimer(timer);
+  });
+  return ids.length;
 }

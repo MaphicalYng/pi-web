@@ -1,0 +1,8 @@
+{
+  "name": "pi-web-desktop",
+  "productName": "Pi Web",
+  "version": "0.0.0",
+  "description": "Pi Web desktop shell (Electron)",
+  "license": "MIT",
+  "main": "main/index.js"
+}

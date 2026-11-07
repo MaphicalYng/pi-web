@@ -43,6 +43,17 @@ These are declined however well they are implemented:
 - **Keep it to one change per pull request.** Split unrelated fixes into separate ones.
 - **For a bug fix, explain how to reproduce it** on `main` and why the change fixes the cause.
 - **Run the checks:** `npm test`, `node_modules/.bin/tsc --noEmit`, and `npm run lint`. Do not run `next build` during development (see [AGENTS.md](./AGENTS.md)).
+- **For `desktop/` changes, run the desktop suite and a packaged build too.** `npm test` globs `app/`, `components/`, `hooks/`, `lib/` and `public/` only, so run the desktop tests explicitly:
+
+  ```bash
+  node --import ./desktop/main/__tests__/ts-resolve.mjs --test --test-timeout=20000 \
+    desktop/shared/__tests__/*.test.mjs desktop/main/__tests__/*.test.mjs \
+    desktop/server/__tests__/*.test.mjs
+  npm run build:desktop   # dist/desktop, then release/mac-arm64/Pi Web.app and the DMG
+  npm run smoke:desktop   # layout, launch, guards, shutdown and orphan checks on the packaged app
+  ```
+
+  A desktop build writes only to `dist/desktop/` and `release/` and leaves `.next/` alone. The smoke test is the only check that exercises the packaged app, and it needs macOS on Apple Silicon. Code signing, notarization, auto-update, and Windows or Linux packages are not part of the current shell; see [the desktop note](./docs/agents/desktop.md) before changing the backend entry, the cookie handling or `electron-builder.yml`.
 - **Translate new UI text.** Add every new string in `en`, `zh-CN` and `zh-TW` ([Internationalization](./docs/i18n.md)).
 - **Read the relevant topic notes.** [AGENTS.md](./AGENTS.md) maps each area of the code to a note in `docs/agents/`. Read the notes for every file you change.
 - **Avoid new runtime dependencies.** If one is needed, say why.

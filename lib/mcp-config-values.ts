@@ -8,6 +8,13 @@ import type { McpConfigFieldRef } from "./api-types";
 // resolves is made once.
 
 export const WEB_PASSWORD_VARIABLE = "PI_WEB_PASSWORD";
+/**
+ * The desktop backend's per-run IPC secret (`desktop/server/config.ts` deletes
+ * it from the environment before any SDK module loads). A reference in
+ * `mcp.json` is refused before connecting: the SDK resolves `${VAR}`, `$VAR`
+ * and `!command` against this process, and `!printenv` can read names too.
+ */
+export const DESKTOP_SECRET_VARIABLE = "PI_WEB_DESKTOP_SESSION";
 
 export interface McpResolvedConfigValue extends McpConfigFieldRef {
   value: string;
@@ -60,10 +67,28 @@ export function resolvedConfigValues(config: unknown): McpResolvedConfigValue[] 
  * runs it with this process's whole environment.
  */
 export function findWebPasswordField(config: unknown, parsers: McpConfigValueParsers): McpConfigFieldRef | undefined {
+  return findReferencedVariableField(config, WEB_PASSWORD_VARIABLE, parsers);
+}
+
+/**
+ * The value of `config` that references the desktop backend's IPC secret, or
+ * undefined. Same walk and rules as `findWebPasswordField()`: a `!command` can
+ * read the variable without a `$` reference, names compare upper-cased as
+ * Windows resolves them.
+ */
+export function findDesktopSecretField(config: unknown, parsers: McpConfigValueParsers): McpConfigFieldRef | undefined {
+  return findReferencedVariableField(config, DESKTOP_SECRET_VARIABLE, parsers);
+}
+
+function findReferencedVariableField(
+  config: unknown,
+  variable: string,
+  parsers: McpConfigValueParsers,
+): McpConfigFieldRef | undefined {
   for (const { value, ...field } of resolvedConfigValues(config)) {
     const references = parsers.isCommandConfigValue(value)
-      ? value.toUpperCase().includes(WEB_PASSWORD_VARIABLE)
-      : parsers.getConfigValueEnvVarNames(value).some((name) => name.toUpperCase() === WEB_PASSWORD_VARIABLE);
+      ? value.toUpperCase().includes(variable)
+      : parsers.getConfigValueEnvVarNames(value).some((name) => name.toUpperCase() === variable);
     if (references) return field;
   }
   return undefined;

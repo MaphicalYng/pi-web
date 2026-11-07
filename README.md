@@ -111,6 +111,39 @@ $env:NO_PROXY = "localhost,127.0.0.1"
 npx @agegr/pi-web@latest
 ```
 
+## Desktop App (macOS)
+
+Pi Web also runs as a macOS desktop app: the same UI in an Electron window, with its own local server inside the app bundle, so no separate `pi-web` process and no Node.js installation are needed. Both the app and the browser version read and write the same agent directory, so switching between them needs no migration.
+
+**Requirements**: macOS 12 (Monterey) or later on Apple Silicon. The build is unsigned and shipped as a DMG from this repository's desktop build, not from a package registry.
+
+**Install**:
+
+1. Open the DMG and drag **Pi Web** into `Applications`.
+2. The app is not signed or notarized, so Gatekeeper refuses the first launch. Right-click the app, choose **Open**, then confirm **Open**; or clear the download flag once:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Pi Web.app"
+```
+
+Later launches are an ordinary double-click. Installing a newer DMG over the old app is the update path (see the limitations below).
+
+**Shared data**: sessions, model configuration, credentials, skills, plugins and MCP servers all stay in `~/.pi/agent` (or `PI_CODING_AGENT_DIR`), exactly as for the browser version and the pi CLI, so a session started in the app can be resumed in either of them. The app writes its logs to `~/Library/Logs/Pi Web/` (`main.log`, openable from the app menu) and keeps no copy of agent data in a database of its own.
+
+**Development**:
+
+```bash
+npm run dev            # the dev server on 127.0.0.1:30141
+npm run build:desktop  # dist/desktop, then release/mac-arm64/Pi Web.app and the DMG
+npm run smoke:desktop  # launch the packaged app and check layout, guards, shutdown
+```
+
+An unpackaged launch attaches to a healthy server on port 30141 and starts `npm run dev` itself only when that port is free; a port held by some other program is a hard failure rather than a second server.
+
+**Closing** the last window quits the app, so no agent keeps running invisibly; while a turn is still running it asks for confirmation first. There is no menu-bar or tray mode. The shell, its security boundary and the packaging layout are described in [the desktop note](./docs/agents/desktop.md).
+
+**Current limitations**: macOS arm64 only, unsigned and not notarized, no automatic updates (install a new DMG over the old app), no menu-bar or tray mode, and no Windows or Linux build. Plugin and skill installs use the `npm` / `npx` found on your `PATH`; the app does not bundle its own.
+
 ## Notes
 
 - **Agent data**: Pi Web reads pi data from `~/.pi/agent` by default, including session files under `sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`. Set `PI_CODING_AGENT_DIR` to use another pi agent directory.
@@ -201,6 +234,7 @@ hooks/           Client state and interaction hooks
 lib/             Session, agent, model, file, Git, and security logic
 public/          Static assets and PWA files
 bin/             npm CLI entrypoint and launch option parsing
+desktop/         Electron shell: main process, preload, backend entry, packaging scripts
 docs/            Focused user and contributor guides
 demo/            Static browser demo published to GitHub Pages (see demo/README.md)
 ```
