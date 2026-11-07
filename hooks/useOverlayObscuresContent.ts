@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { overlayCoversContent, type RectLike } from "@/lib/overlay-obscures";
+import { contentOccupies, overlayCoversContent, type RectLike } from "@/lib/overlay-obscures";
 
 function rectOf(element: Element): RectLike {
   const rect = element.getBoundingClientRect();
@@ -26,6 +26,10 @@ function rectOf(element: Element): RectLike {
  *
  * Listening: the scroller's scroll, window resize, and a ResizeObserver on the
  * overlay, the scroller and its content. Measurements coalesce into one frame.
+ *
+ * The box compared is the one the messages occupy, not the scroller's viewport:
+ * the viewport reaches down to the composer in every chat, so a panel measured
+ * against it would rail even beside an empty half-screen.
  */
 export function useOverlayObscuresContent(
   overlayRef: RefObject<HTMLElement | null>,
@@ -61,7 +65,9 @@ export function useOverlayObscuresContent(
       if (!railedRef.current && live.height > 0 && live.width > 0) lastOpenRect = live;
       const box = lastOpenRect ?? (live.height > 0 ? live : null);
       if (!box) return;
-      const next = overlayCoversContent(box, rectOf(scroll));
+      const content = scroll.firstElementChild;
+      const occupied = content ? contentOccupies(rectOf(scroll), rectOf(content)) : null;
+      const next = occupied ? overlayCoversContent(box, occupied) : false;
       setObscured((previous) => (previous === next ? previous : next));
     };
 

@@ -1,17 +1,23 @@
 /**
- * Whether a floating overlay covers the chat.
+ * Whether a floating overlay covers the chat's messages.
  *
  * The overlay sits above the composer, over the message list's lower left
- * corner, and grows upward as it gains rows. When its box reaches into the
- * scroller's viewport it railed itself to a narrow strip against the chat
- * column's left edge; when it stays below that viewport, it stays open.
+ * corner, and grows upward as it gains rows. When its box reaches the box the
+ * messages actually occupy, it rails itself to a narrow strip against the chat
+ * column's left edge; while it stays below that content, it stays open.
  *
- * The test is deliberately geometric. An earlier version hit-tested the
- * overlay's area for text and only railed over a word; that answer flapped as
- * the list scrolled (the same box covered text, then blank padding, then text),
- * and a panel that flickers between two shapes is worse than one that rails a
- * little eagerly. Overlap with the scroller is stable, cheap, and matches what
- * a reader sees: the panel's lower-left corner sitting over the conversation.
+ * The test is deliberately geometric, and it measures **content**, not the
+ * scroller's viewport: the scroller always reaches down to the composer, so a
+ * panel compared against it would rail even with the conversation half empty,
+ * which is what a reader does not see. The content box is the scroller's inner
+ * wrapper clipped to the visible part of the scroller.
+ *
+ * An earlier version hit-tested the overlay's area for text and only railed
+ * over a word; that answer flapped as the list scrolled (the same box covered
+ * text, then blank padding, then text), and a panel that flickers between two
+ * shapes is worse than one that rails a little eagerly. Content boxes stay put
+ * while nothing scrolls, and the caller measures the panel as it is drawn open
+ * (`lastOpenRect`), so neither shape feeds back into its own answer.
  */
 
 export interface RectLike {
@@ -32,11 +38,30 @@ export function overlapsScrollViewport(overlay: RectLike, scroll: RectLike): boo
 }
 
 /**
- * Whether a panel, as drawn open, would cover the conversation.
+ * The part of a scroller its content occupies, clipped to what the reader can
+ * see: the scroller's own left and right edges, and the taller of the two
+ * boxes' shared band. `null` when nothing is visible.
+ */
+export function contentOccupies(scroll: RectLike, content: RectLike | null): RectLike | null {
+  if (!content) return null;
+  const top = Math.max(scroll.top, content.top);
+  const bottom = Math.min(scroll.bottom, content.bottom);
+  const left = Math.max(scroll.left, content.left);
+  const right = Math.min(scroll.right, content.right);
+  if (!(bottom > top) || !(right > left)) return null;
+  return { top, bottom, left, right, width: right - left, height: bottom - top };
+}
+
+/**
+ * Whether a panel, as drawn open, would cover the messages.
  *
  * Both boxes are viewport coordinates. A panel with no area covers nothing.
  */
-export function overlayCoversContent(overlay: RectLike, scroll: RectLike): boolean {
+export function overlayCoversContent(overlay: RectLike, content: RectLike): boolean {
   if (!(overlay.width > 0) || !(overlay.height > 0)) return false;
-  return overlapsScrollViewport(overlay, scroll);
+  if (!(content.width > 0) || !(content.height > 0)) return false;
+  return overlay.top < content.bottom
+    && overlay.bottom > content.top
+    && overlay.left < content.right
+    && overlay.right > content.left;
 }
