@@ -29,13 +29,16 @@ function rectOf(element: Element): RectLike {
  *
  * The box compared is the one the messages occupy, not the scroller's viewport:
  * the viewport reaches down to the composer in every chat, so a panel measured
- * against it would rail even beside an empty half-screen.
+ * against it would rail even beside an empty half-screen. `messageColumnRef`
+ * names the centred column the messages are laid out in; without it the
+ * scroller's inner wrapper is used, which spans the column's full width.
  */
 export function useOverlayObscuresContent(
   overlayRef: RefObject<HTMLElement | null>,
   scrollRef: RefObject<HTMLElement | null> | undefined,
   enabled: boolean,
   railed = false,
+  messageColumnRef?: RefObject<HTMLElement | null>,
 ): boolean {
   const [obscured, setObscured] = useState(false);
   // Read inside the frame callback, so a rail/open change does not re-subscribe.
@@ -58,6 +61,8 @@ export function useOverlayObscuresContent(
     let lastOpenRect: RectLike | null = null;
     let unmounted = false;
 
+    const contentOf = () => messageColumnRef?.current ?? scroll.firstElementChild;
+
     const measure = () => {
       frame = 0;
       if (unmounted) return;
@@ -65,7 +70,7 @@ export function useOverlayObscuresContent(
       if (!railedRef.current && live.height > 0 && live.width > 0) lastOpenRect = live;
       const box = lastOpenRect ?? (live.height > 0 ? live : null);
       if (!box) return;
-      const content = scroll.firstElementChild;
+      const content = contentOf();
       const occupied = content ? contentOccupies(rectOf(scroll), rectOf(content)) : null;
       const next = occupied ? overlayCoversContent(box, occupied) : false;
       setObscured((previous) => (previous === next ? previous : next));
@@ -82,7 +87,7 @@ export function useOverlayObscuresContent(
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(schedule) : null;
     observer?.observe(overlay);
     observer?.observe(scroll);
-    const content = scroll.firstElementChild;
+    const content = contentOf();
     if (content) observer?.observe(content);
 
     return () => {
@@ -92,7 +97,7 @@ export function useOverlayObscuresContent(
       window.removeEventListener("resize", schedule);
       observer?.disconnect();
     };
-  }, [enabled, overlayRef, scrollRef]);
+  }, [enabled, overlayRef, scrollRef, messageColumnRef]);
 
   return obscured;
 }

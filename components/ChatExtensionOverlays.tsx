@@ -181,6 +181,7 @@ export function ChatExtensionOverlays({
   todos,
   sessionId,
   scrollRootRef,
+  messageColumnRef,
 }: {
   backgroundTaskText?: string;
   todos?: ExtensionWidgetItem;
@@ -188,6 +189,9 @@ export function ChatExtensionOverlays({
   sessionId?: string;
   /** The chat scroller the overlay may cover; omitted means "never rail". */
   scrollRootRef?: React.RefObject<HTMLElement | null>;
+  /** The centred column the messages are laid out in, so the panel is measured
+      against the text's own width rather than the whole chat column. */
+  messageColumnRef?: React.RefObject<HTMLElement | null>;
 }) {
   const details = useBackgroundTaskList(sessionId, Boolean(backgroundTaskText));
   // The label and tooltip are plain text: an escape sequence belongs inside
@@ -214,6 +218,7 @@ export function ChatExtensionOverlays({
     scrollRootRef,
     hasOverlays,
     railedRef.current,
+    messageColumnRef,
   );
   const railed = coversContent && !railHovered && !railPinned;
   railedRef.current = railed;

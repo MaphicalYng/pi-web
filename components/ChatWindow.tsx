@@ -1532,6 +1532,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
             todos={chatOverlays.todos}
             sessionId={session?.id}
             scrollRootRef={scrollContainerRef}
+            messageColumnRef={messageContentRef}
           />
           <ExtensionStatusBar
             statuses={chatOverlays.remainingStatuses}

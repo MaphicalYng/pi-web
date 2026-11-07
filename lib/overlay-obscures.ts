@@ -9,8 +9,11 @@
  * The test is deliberately geometric, and it measures **content**, not the
  * scroller's viewport: the scroller always reaches down to the composer, so a
  * panel compared against it would rail even with the conversation half empty,
- * which is what a reader does not see. The content box is the scroller's inner
- * wrapper clipped to the visible part of the scroller.
+ * which is what a reader does not see. The content box is the message column
+ * (the centred, max-width element the messages are laid out in) clipped to the
+ * visible part of the scroller — not the scroller's inner wrapper, which spans
+ * the whole column and so overlaps the panel even when the message text starts
+ * well to the right of it.
  *
  * An earlier version hit-tested the overlay's area for text and only railed
  * over a word; that answer flapped as the list scrolled (the same box covered
