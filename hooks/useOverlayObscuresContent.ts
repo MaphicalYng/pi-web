@@ -3,8 +3,12 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { contentOccupies, overlayCoversContent, type RectLike } from "@/lib/overlay-obscures";
 
-function rectOf(element: Element): RectLike {
-  const rect = element.getBoundingClientRect();
+/** A measurement taken before the column or the panel has its data retries
+ *  itself, so an empty first frame cannot leave the panel open for good. */
+const RETRY_MS = 400;
+const RETRY_LIMIT = 3;
+
+function rectOf(element: Element): RectLike {  const rect = element.getBoundingClientRect();
   return {
     top: rect.top,
     bottom: rect.bottom,
@@ -63,16 +67,46 @@ export function useOverlayObscuresContent(
 
     const contentOf = () => messageColumnRef?.current ?? scroll.firstElementChild;
 
+    // A panel whose data arrives one poll later, or a column laid out a frame
+    // after its first paint, would otherwise measure as "nothing to cover" and
+    // stay open until some unrelated event re-ran the measurement.
+    let retryTimer = 0;
+    let retries = 0;
+    const scheduleRetry = () => {
+      if (retryTimer || unmounted || retries >= RETRY_LIMIT) return;
+      retries += 1;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = 0;
+        schedule();
+      }, RETRY_MS);
+    };
+
     const measure = () => {
       frame = 0;
       if (unmounted) return;
       const live = rectOf(overlay);
       if (!railedRef.current && live.height > 0 && live.width > 0) lastOpenRect = live;
-      const box = lastOpenRect ?? (live.height > 0 ? live : null);
-      if (!box) return;
+      // While railed the box on screen is the strip, but the strip shares the
+      // open panel's bottom edge: rebasing the remembered box on that edge keeps
+      // the answer right when a resize moves the whole shelf, instead of holding
+      // a box measured at a height the window no longer has.
+      const open = railedRef.current && lastOpenRect
+        ? { ...lastOpenRect, top: live.bottom - lastOpenRect.height, bottom: live.bottom }
+        : lastOpenRect;
+      const box = open ?? (live.height > 0 ? live : null);
+      if (!box) {
+        scheduleRetry();
+        return;
+      }
       const content = contentOf();
       const occupied = content ? contentOccupies(rectOf(scroll), rectOf(content)) : null;
-      const next = occupied ? overlayCoversContent(box, occupied) : false;
+      if (!occupied) {
+        setObscured(false);
+        scheduleRetry();
+        return;
+      }
+      retries = 0;
+      const next = overlayCoversContent(box, occupied);
       setObscured((previous) => (previous === next ? previous : next));
     };
 
@@ -90,12 +124,21 @@ export function useOverlayObscuresContent(
     const content = contentOf();
     if (content) observer?.observe(content);
 
+    // Rows and counts change without changing the panel's box (a task finishing,
+    // a todo checked off), and the box only grows once its data lands.
+    const mutations = typeof MutationObserver === "function" ? new MutationObserver(schedule) : null;
+    const mutationOptions = { childList: true, subtree: true, characterData: true } as const;
+    mutations?.observe(overlay, mutationOptions);
+    if (content) mutations?.observe(content, mutationOptions);
+
     return () => {
       unmounted = true;
       if (frame) window.cancelAnimationFrame(frame);
+      if (retryTimer) window.clearTimeout(retryTimer);
       scroll.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
       observer?.disconnect();
+      mutations?.disconnect();
     };
   }, [enabled, overlayRef, scrollRef, messageColumnRef]);
 
