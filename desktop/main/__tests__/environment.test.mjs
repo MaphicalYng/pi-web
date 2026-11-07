@@ -6,6 +6,7 @@ import {
   fallbackPath,
   GUI_ENV_MARKER,
   mergeLoginEnvironment,
+  mergeSearchPath,
   parseProbeOutput,
   parseProbeOutputFromLastMarker,
   resolveGuiEnvironment,
@@ -46,7 +47,8 @@ test("merge only fills gaps and always ends with a PATH", () => {
     PATH: fallbackPath(),
   });
   assert.equal(mergeLoginEnvironment({}, null).PATH, fallbackPath());
-  assert.equal(mergeLoginEnvironment({ PATH: "/custom" }, { PATH: "/login" }).PATH, "/custom");
+  // PATH is the one exception to "main process wins": both sides are kept.
+  assert.equal(mergeLoginEnvironment({ PATH: "/custom" }, { PATH: "/login" }).PATH, "/login:/custom");
 });
 
 test("the login-shell probe is zsh -lic with a bounded timeout and stripped env", () => {
@@ -68,9 +70,37 @@ test("resolveGuiEnvironment merges a successful probe and keeps main-process val
       return undefined;
     },
   });
-  assert.equal(environment.PATH, "/usr/bin");
+  // PATH is an ordered union: the login shell's entries first, so a bundled
+  // tool installed through Homebrew stays reachable from a Finder launch.
+  assert.equal(environment.PATH, "/opt/homebrew/bin:/usr/bin");
   assert.equal(environment.NVM_DIR, "/Users/x/.nvm");
   assert.equal(environment.PI_WEB_DESKTOP, undefined);
+});
+
+test("a Finder-like minimal PATH gains the login shell's directories", async () => {
+  // What launchd hands a Dock-launched app: no Homebrew, no pnpm, no per-user bins.
+  const environment = await resolveGuiEnvironment({
+    env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+    platform: "darwin",
+    execFile: (_file, _args, _options, callback) => {
+      callback(null, `${MARKER}PATH=/opt/homebrew/bin:/usr/bin:/bin\0`);
+      return undefined;
+    },
+  });
+  assert.equal(environment.PATH, "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin");
+});
+
+test("mergeSearchPath keeps the login order and appends only new entries", () => {
+  assert.equal(mergeSearchPath(undefined, "/usr/bin"), "/usr/bin");
+  assert.equal(mergeSearchPath("/opt/homebrew/bin", undefined), "/opt/homebrew/bin");
+  assert.equal(mergeSearchPath(undefined, undefined), undefined);
+  // An explicitly extended PATH still takes effect, after the login entries.
+  assert.equal(
+    mergeSearchPath("/opt/homebrew/bin:/usr/bin", "/custom/bin:/usr/bin"),
+    "/opt/homebrew/bin:/usr/bin:/custom/bin",
+  );
+  // Empty entries (a trailing or doubled colon) are dropped, not kept as "".
+  assert.equal(mergeSearchPath("/a::/b:", "/b"), "/a:/b");
 });
 
 test("resolveGuiEnvironment falls back to the inherited environment on failure", async () => {
@@ -87,6 +117,8 @@ test("resolveGuiEnvironment falls back to the inherited environment on failure",
   assert.equal(environment.PATH, "/usr/bin");
   assert.equal(environment.HOME, "/Users/x");
   assert.equal(warnings.length, 1);
+  // A failed probe leaves the inherited PATH alone; it is never widened blindly.
+  assert.equal(environment.PATH, "/usr/bin");
 
   const nonMac = await resolveGuiEnvironment({
     env: { PATH: "/usr/bin" },
