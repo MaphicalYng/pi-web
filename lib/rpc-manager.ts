@@ -2884,6 +2884,18 @@ export async function destroyRpcSessionsForCwd(cwd: string): Promise<number> {
   return sessions.length;
 }
 
+/**
+ * Shuts every registered wrapper down, for an embedder that exits on purpose
+ * (the desktop server). Unlike `destroy()`, this disposes each session's
+ * extensions and MCP hosts; wrappers resolve after their own shutdown
+ * deadline, so a stuck session cannot hold the caller forever.
+ */
+export async function shutdownAgentSessions(): Promise<number> {
+  const sessions = Array.from(getRegistry().values());
+  await Promise.allSettled(sessions.map((session) => session.shutdown()));
+  return sessions.length;
+}
+
 export function getRunningRpcSessionIds(): string[] {
   const ids = new Set<string>();
   for (const [sessionId, session] of getRegistry()) {

@@ -9,6 +9,11 @@ import {
   isApiRequestHostAllowed,
 } from "@/lib/request-security";
 import {
+  getDesktopAuthContext,
+  hasValidDesktopSession,
+  isDesktopMode,
+} from "@/lib/desktop-auth";
+import {
   isValidWebSessionToken,
   isValidBasicAuthorization,
   isWebPasswordEnabled,
@@ -40,7 +45,46 @@ export function proxy(request: NextRequest) {
   }
 
   const password = process.env.PI_WEB_PASSWORD;
-  if (!isWebPasswordEnabled(password)) {
+  const passwordEnabled = isWebPasswordEnabled(password);
+
+  // Desktop mode: the shell's session cookie is one accepted credential. The
+  // cookie must be exactly one value equal to this run's secret; a mutation
+  // must also carry this listener's exact Origin (the transport guard already
+  // rejected any other Host/Origin, so this is the second exact check).
+  //
+  // With a browser password configured, the ordinary Web credentials (Basic or
+  // a Web-session cookie) stay accepted as well: the desktop app keeps the
+  // password behaviour the shell documents, and a valid desktop cookie never
+  // weakens that check. Without a password there is no fallback, so a missing
+  // session fails closed (the shell has not handed its secret over yet).
+  if (isDesktopMode()) {
+    const desktop = getDesktopAuthContext();
+    if (desktop && hasValidDesktopSession(request, desktop)) {
+      if (request.nextUrl.pathname === "/login") {
+        return NextResponse.redirect(new URL("/", request.url));
+      }
+      const method = request.method.toUpperCase();
+      const isMutation = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+      if (isMutation && (!desktop.origin || request.headers.get("origin") !== desktop.origin)) {
+        return isApiRequest
+          ? NextResponse.json({ error: "Untrusted API request" }, { status: 403 })
+          : new NextResponse("Untrusted request", { status: 403 });
+      }
+      return NextResponse.next();
+    }
+    if (!passwordEnabled) {
+      // Nothing to log in to; keep the Web build's `/login` redirect and refuse
+      // every other page until the shell hands its session over.
+      if (request.nextUrl.pathname === "/login") {
+        return NextResponse.redirect(new URL("/", request.url));
+      }
+      return isApiRequest
+        ? NextResponse.json({ error: "Desktop session required" }, { status: 401, headers: { "Cache-Control": "no-store" } })
+        : new NextResponse("Desktop session required", { status: 403, headers: { "Cache-Control": "no-store" } });
+    }
+  }
+
+  if (!passwordEnabled) {
     if (request.nextUrl.pathname === "/login") {
       return NextResponse.redirect(new URL("/", request.url));
     }

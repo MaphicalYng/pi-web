@@ -16,8 +16,23 @@ try {
 // swaps it for an equivalent built at runtime; both bundlers must run it.
 const gfmAutolinkEmailLoader = join(configDir, "lib/gfm-autolink-email-loader.cjs");
 
+// The desktop package needs a standalone build written outside `.next`: `npm
+// run dev` owns `.next` through `.next/dev/lock`, so a build inside it breaks a
+// running dev server. Both switches stay off by default, leaving `npm run
+// build`, `next start`, the npm package and Docker on their current output.
+const desktopBuild = process.env.PI_WEB_DESKTOP_BUILD === "1";
+const desktopDistDir = desktopBuild
+  ? process.env.PI_WEB_DESKTOP_DIST_DIR?.trim()
+  : undefined;
+
 const nextConfig: NextConfig = {
   outputFileTracingRoot: configDir,
+  ...(desktopBuild
+    ? {
+        output: "standalone" as const,
+      }
+    : {}),
+  ...(desktopDistDir ? { distDir: desktopDistDir } : {}),
   experimental: {
     // proxy.ts matches /api/:path*, and Next buffers the request body whenever
     // a proxy is present, capped at 10 MB by default. The upload route accepts

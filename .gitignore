@@ -21,9 +21,14 @@
 # production
 /build
 
+# desktop packaging output
+/dist/
+/release/
+
 # misc
 .DS_Store
 *.pem
+/.pi/
 /.agents/
 /skills-lock.json
 

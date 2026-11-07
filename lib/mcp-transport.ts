@@ -1,11 +1,26 @@
 import type { McpServerConfig, McpTransportFactory } from "@earendil-works/pi-coding-agent";
 import type { McpConfigFieldRef } from "./api-types";
-import { findWebPasswordField, resolvedConfigValues, WEB_PASSWORD_VARIABLE, type McpResolvedConfigValue } from "./mcp-config-values";
+import {
+  DESKTOP_SECRET_VARIABLE,
+  findDesktopSecretField,
+  findWebPasswordField,
+  resolvedConfigValues,
+  WEB_PASSWORD_VARIABLE,
+  type McpResolvedConfigValue,
+} from "./mcp-config-values";
 import type { PiSdkInternals } from "./pi-sdk-internals";
 import { sanitizeProjectCommandEnvironment } from "./project-command-env";
+import { desktopEnvWithoutSecrets } from "./desktop-env";
 
 // The resolved-value walk and the PI_WEB_PASSWORD rule are client-safe (`lib/mcp-config-values.ts`).
-export { findWebPasswordField, resolvedConfigValues, WEB_PASSWORD_VARIABLE, type McpResolvedConfigValue };
+export {
+  DESKTOP_SECRET_VARIABLE,
+  findDesktopSecretField,
+  findWebPasswordField,
+  resolvedConfigValues,
+  WEB_PASSWORD_VARIABLE,
+  type McpResolvedConfigValue,
+};
 
 // MCP servers are started on behalf of a project like its bash commands, so
 // they get the same environment: the server's own, without the variables that
@@ -46,10 +61,11 @@ function serverEnvironment(
   configured: Record<string, string>,
   platform: NodeJS.Platform,
 ): Record<string, string> {
+  // Bash-command sanitizing also hides the desktop host's own variables
+  // (`PI_WEB_DESKTOP*`, the session) from every stdio server.
   const environment: Record<string, string> = {};
-  for (const [name, value] of Object.entries(sanitizeProjectCommandEnvironment(baseEnvironment, platform))) {
-    if (value !== undefined) environment[name] = value;
-  }
+  const sanitized = desktopEnvWithoutSecrets(sanitizeProjectCommandEnvironment(baseEnvironment, platform), platform);
+  for (const [name, value] of Object.entries(sanitized)) environment[name] = value;
   for (const [name, value] of Object.entries(configured)) {
     if (platform === "win32") {
       for (const existing of Object.keys(environment)) {
@@ -74,10 +90,18 @@ export function createPiWebMcpTransportFactory(
   options: PiWebMcpTransportOptions = {},
 ): McpTransportFactory {
   const platform = options.platform ?? process.platform;
-  return (entry, cwd, authProvider) => {
+  return (
+    entry: Parameters<McpTransportFactory>[0],
+    cwd: string,
+    authProvider: Parameters<typeof internals.createDefaultTransport>[2],
+  ) => {
     const field = findWebPasswordReference(entry.config, internals);
     if (field) {
       throw new Error(`MCP server "${entry.name}" ${field} references ${WEB_PASSWORD_VARIABLE}, which Pi Web does not pass to MCP servers`);
+    }
+    const desktopField = findDesktopSecretField(entry.config, internals);
+    if (desktopField) {
+      throw new Error(`MCP server "${entry.name}" ${describeConfigField(desktopField)} references ${DESKTOP_SECRET_VARIABLE}, which the desktop backend never passes to MCP servers`);
     }
     const transport = internals.createDefaultTransport(entry, cwd, authProvider);
     if ("url" in entry.config) return transport;

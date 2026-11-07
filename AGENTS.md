@@ -257,6 +257,34 @@ hooks/
   usePrismLanguages.ts     true once the Prism languages are loaded; starts the load for a highlighter
   useTheme.ts              theme state
   useTerminalTheme.ts      the terminal's own dark/light choice (localStorage), apart from the app theme
+
+desktop/
+  main/index.ts            app bootstrap: single-instance lock, logs, GUI environment, backend supervisor, window, quit wiring; there is no ipcMain handler
+  main/app-controller.ts   development vs production start, the first-page load order, failure report, cleanup order
+  main/backend-supervisor.ts utilityProcess phases (idle → starting → ready → stopping → stopped | failed), the message protocol, shutdown handshake then hard kill
+  main/window-manager.ts   the one secureWindowOptions(), the __pi-web-session cookie set and awaited before loadURL, native dialogs, renderer crash recovery
+  main/navigation.ts       in-origin navigation kept, window.open denied, external http(s) opened once, permission policy
+  main/development-server.ts a healthy 127.0.0.1:30141 is reused; only an absent port spawns `npm run dev`; an occupied port is fatal
+  main/environment.ts      login-shell GUI environment probe, desktop variables stripped, PATH fallback
+  main/quit-coordinator.ts one quit promise for before-quit, signals and window close; backend → cookie → window
+  main/menu.ts             app menu: Retry Backend, Open Logs, Reload Page (unpackaged only)
+  main/logger.ts           main.log with startup rotation and secret redaction
+  main/constants.ts        frozen timeouts (ready 30 s, shutdown 60 s, stop/kill grace 2 s, first page 30 s, dev 30141)
+  main/http-probes.ts      the bounded first-page and development-server probes
+  main/probe-options.ts · activity.ts · electron-runtime.ts  probe options from electron.net.fetch, the activity timer, the Electron runtime indirection tests replace
+  preload/index.ts         intentionally empty: no contextBridge, no ipcRenderer, no globals
+  server/index.ts          backend entry: handoff, the session taken from the environment and deleted before Next/pi load, console redaction, ready with the real origin
+  server/config.ts         desktop config refusals, the standalone root, the 64-hex session pattern, resources paths
+  server/next-server.ts    127.0.0.1:0 listener, exact Host/Origin guards on requests and upgrades, Next router-server bootstrap
+  server/lifecycle.ts      the ordered shutdown with a per-step deadline; rpc-manager/terminal-manager cleanup loaded lazily
+  server/redaction.ts      redaction of the desktop session and PI_WEB_PASSWORD in console, log and fatal output
+  shared/backend-protocol.ts the message and environment constants both sides validate; the shutdown budget clamp
+  shared/urls.ts · timers.ts  loopback origin text, timer indirection for tests
+  packaging/build-desktop.mjs  build:desktop: Next standalone into dist/desktop, the tsc shell build, assembly, electron-builder
+  packaging/smoke-desktop.mjs  smoke:desktop: the packaged app's layout, launch, guards, shutdown handshake and orphan check
+  packaging/app-package.json · tsconfig.build.json  the packaged app's package.json and the shell's tsconfig
+  __tests__/               node:test over injected fakes; not part of `npm test`
+electron-builder.yml       packaging config: unsigned, macOS arm64 DMG, the backend as extraResources
 ```
 
 ---
@@ -277,6 +305,7 @@ Design decisions and traps live in `docs/agents/`, one note per area. Read every
 - [side-sessions.md](docs/agents/side-sessions.md): side chats (ADR 0007): the Fork copy with a `pi-web:side` entry inside the bounded head read, the `side` relation kind and family fold, the parent's session minus tools (an allow-list of exactly its tools), the hidden boundary message and where each provider's request puts the tool change, `/side`, the tab shared with subagents, usage that skips inherited entries. Files: `lib/side-session.ts`, `lib/session-fork.ts`, `lib/session-family.ts`, `lib/session-delete.ts`, `lib/session-reader.ts`, side handling in `lib/rpc-manager.ts`, `app/api/sessions/[id]/fork/route.ts`, `app/api/sessions/stats/route.ts`, `components/SessionChatPanel.tsx`, `components/TabBar.tsx`, `components/AgentSessionPanel.tsx`, `components/ChatInput.tsx`, `hooks/useAgentSession.ts`, `lib/side-chat-client.ts`, side handling in `components/AppShell.tsx`.
 - [subagents.md](docs/agents/subagents.md): the built-in subagent setting, profiles and their files, run status, completion notifications, the subagent tab. Files: `lib/subagent*.ts`, `app/api/subagents/**`, `components/AgentsConfig.tsx`, `components/SessionChatPanel.tsx`.
 - [client-platform.md](docs/agents/client-platform.md): the global shortcuts (Ctrl+Alt+N on macOS's dead-key Option+N and Windows AltGr, Esc stacking), mobile software keyboard and viewport height, the terminal's shell (PowerShell first on Windows), the terminal's extra keys, its own dark/light theme and its font size following the chat's, completion sound, the launcher opening the browser only after the first page is served. Files: `hooks/useKeyboardShortcuts.ts`, `hooks/useViewportHeight.ts`, `hooks/useAudio.ts`, `terminalShell()` in `lib/terminal-manager.ts`, `components/TerminalExtraKeys.tsx`, `lib/terminal-extra-keys.ts`, `lib/terminal-theme.ts`, `hooks/useTerminalTheme.ts`, `terminalFontSize()` in `hooks/useChatAppearance.ts`, the keyboard-open CSS, `bin/browser-opener.js`, the browser opening in `bin/pi-web.js`.
+- [desktop.md](docs/agents/desktop.md): the Electron shell and its desktop-only pieces: the main/backend phases and the `ready` / `fatal` / `shutdown` / `stopped` protocol (a `stopped` acknowledgement is not proof of exit), the deliberately empty preload, development mode reusing a healthy 30141 and never spawning a second dev server, the `__pi-web-session` cookie set before `loadURL`, the navigation and permission policy, the backend entry's handoff and exact Host/Origin listener, the ordered shutdown with per-step deadlines, GUI environment recovery from a login shell, and packaging (Next standalone into an isolated `distDir`, the backend outside the asar, the node-pty prebuild, the unsigned macOS arm64 DMG) with its own test suite and the post-package smoke gate. Files: `desktop/**`, `electron-builder.yml`, `lib/desktop-env.ts`, `lib/desktop-auth.ts`, desktop branches of `proxy.ts`, `app/api/web-auth/route.ts` and `next.config.ts`, `lib/node-cli.ts` (no bundled npm/npx).
 
 ---
 
