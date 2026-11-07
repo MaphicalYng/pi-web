@@ -69,14 +69,38 @@ export function parseProbeOutputFromLastMarker(stdout: string): EnvironmentMap |
 }
 
 /**
- * Login values only fill gaps; explicitly set main-process values win. The
- * shell's own controlled desktop variables are written later, never here.
+ * PATH as an ordered union: the login shell's entries first (the user's
+ * canonical order), then any main-process entry the login shell did not
+ * report. A Finder or Dock launch starts with launchd's minimal PATH
+ * (`/usr/bin:/bin:/usr/sbin:/sbin`), so treating the main-process PATH as an
+ * explicit choice would hide Homebrew, pnpm and every other per-user bin
+ * directory — that is why `qmd`, `npm` and `npx` were "not installed" in the app
+ * while the very same machine worked through the browser build.
+ */
+export function mergeSearchPath(loginPath: string | undefined, basePath: string | undefined): string | undefined {
+  const entries: string[] = [];
+  for (const source of [loginPath, basePath]) {
+    if (typeof source !== "string") continue;
+    for (const entry of source.split(":")) {
+      if (entry.length === 0) continue;
+      if (!entries.includes(entry)) entries.push(entry);
+    }
+  }
+  return entries.length > 0 ? entries.join(":") : undefined;
+}
+
+/**
+ * Login values only fill gaps; explicitly set main-process values win — except
+ * PATH, which is merged by `mergeSearchPath()`. The shell's own controlled
+ * desktop variables are written later, never here.
  */
 export function mergeLoginEnvironment(base: EnvironmentMap, login: EnvironmentMap | null): EnvironmentMap {
   const merged: EnvironmentMap = login ? { ...login } : {};
   for (const [key, value] of Object.entries(base)) {
     merged[key] = value;
   }
+  const path = mergeSearchPath(login?.PATH, base.PATH);
+  if (path) merged.PATH = path;
   if (!merged.PATH) merged.PATH = FALLBACK_PATH;
   return merged;
 }
