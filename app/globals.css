@@ -2105,13 +2105,22 @@ pre, code {
   display: none;
 }
 
-/* The live extension overlays (background tasks, rpiv-todos) sit just above
-   the composer, anchored to its relative container: they may cover messages,
-   never the input, and scroll on their own once the list outgrows the box. */
+/* The dock (ChatWindow): the live extension overlays and the status shelf under
+   them, one positioned box, so the overlays anchor to the shelf's top edge rather
+   than to the composer. Its own height comes from the shelf alone; the overlays
+   are absolute and never push the composer around. */
+.chat-extension-dock {
+  position: relative;
+  z-index: 20;
+}
+
+/* The live extension overlays (background tasks, rpiv-todos) sit right above the
+   extension status shelf, anchored to the dock: they may cover messages, never
+   the input or the shelf, and scroll on their own once the list outgrows the box. */
 .chat-extension-overlays {
   position: absolute;
   z-index: 20;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 6px);
   left: 16px;
   display: flex;
   flex-direction: column;
@@ -2141,11 +2150,197 @@ pre, code {
   white-space: pre-wrap;
 }
 
+/* The task panel is laid out in rows; only its summary text keeps pre-wrap. */
+.chat-extension-overlay[data-overlay="background-tasks"] {
+  white-space: normal;
+}
+
+.chat-extension-overlay-text {
+  white-space: pre-wrap;
+}
+
+.chat-extension-overlay-title {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* While the open panels would cover messages they fall back to this rail: a
+   narrow vertical strip on the chat column's left edge, opened again by a
+   mouse hover, by keyboard focus, or by a tap (a phone has no hover). */
+.chat-extension-overlays-rail {
+  left: 0;
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  align-items: flex-start;
+}
+
+.chat-extension-rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 5px;
+  border: 1px solid var(--border);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  writing-mode: vertical-rl;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--text) 12%, transparent);
+  cursor: pointer;
+}
+
+/* A wider invisible hot zone: the rail is thin, so the pointer reaching for it
+   should not have to hit its pixels exactly. */
+.chat-extension-rail::after {
+  content: "";
+  position: absolute;
+  inset: -4px -8px -4px 0;
+}
+
+.chat-extension-rail:hover,
+.chat-extension-rail:focus-visible {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.chat-extension-rail-item {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.chat-extension-rail-count {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The tap-open panel's close button (a phone has no hover to leave). */
+.chat-extension-overlay-close {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-extension-overlay-close:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.chat-extension-task-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin-top: 2px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.chat-extension-task-refresh {
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-extension-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-extension-task {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.chat-extension-task-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-extension-task-status {
+  flex: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.chat-extension-task-status-running {
+  color: var(--accent);
+}
+
+.chat-extension-task-status-failed {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.chat-extension-task-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-extension-task-exit,
+.chat-extension-task-id {
+  flex: none;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.chat-extension-task-id {
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-extension-task-meta {
+  overflow: hidden;
+  padding-left: 2px;
+  color: var(--text-dim);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-extension-task-empty,
+.chat-extension-task-more {
+  margin-top: 4px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
 @media (max-width: 640px) {
   .chat-extension-overlays {
     left: 8px;
     width: calc(100% - 16px);
     max-height: 35vh;
+  }
+  /* The rail stays a narrow strip on the left edge, not a full-width box. */
+  .chat-extension-overlays-rail {
+    left: 0;
+    width: auto;
   }
 }
 

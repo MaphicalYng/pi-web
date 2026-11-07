@@ -1523,16 +1523,23 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
           </div>
         )}
         {chatInputElement}
-        <ChatExtensionOverlays
-          backgroundTaskText={chatOverlays.backgroundTaskText}
-          todos={chatOverlays.todos}
-        />
-        <ExtensionStatusBar
-          statuses={chatOverlays.remainingStatuses}
-          widgets={chatOverlays.remainingWidgets}
-          onCommand={handleSend}
-          commandsDisabled={sessionBusy}
-        />
+        {/* The dock: the live overlays above the composer, then the extension status
+            shelf. One wrapper keeps its stacking context together (.chat-extension-dock
+            in app/globals.css). */}
+        <div className="chat-extension-dock">
+          <ChatExtensionOverlays
+            backgroundTaskText={chatOverlays.backgroundTaskText}
+            todos={chatOverlays.todos}
+            sessionId={session?.id}
+            scrollRootRef={scrollContainerRef}
+          />
+          <ExtensionStatusBar
+            statuses={chatOverlays.remainingStatuses}
+            widgets={chatOverlays.remainingWidgets}
+            onCommand={handleSend}
+            commandsDisabled={sessionBusy}
+          />
+        </div>
       </div>
       {isEmptyNew && <div className="min-h-0 flex-1" />}
     </div>
