@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { contentOccupies, overlayCoversContent, type RectLike } from "@/lib/overlay-obscures";
+import { columnBand, overlayCoversContent, type RectLike } from "@/lib/overlay-obscures";
 
 /** A measurement taken before the column or the panel has its data retries
  *  itself, so an empty first frame cannot leave the panel open for good. */
@@ -98,8 +98,8 @@ export function useOverlayObscuresContent(
         scheduleRetry();
         return;
       }
-      const content = contentOf();
-      const occupied = content ? contentOccupies(rectOf(scroll), rectOf(content)) : null;
+      const column = contentOf();
+      const occupied = columnBand(rectOf(scroll), column ? rectOf(column) : null);
       if (!occupied) {
         setObscured(false);
         scheduleRetry();
