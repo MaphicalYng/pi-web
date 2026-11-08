@@ -2114,9 +2114,66 @@ pre, code {
   z-index: 20;
 }
 
-/* The live extension overlays (background tasks, rpiv-todos) sit right above the
-   extension status shelf, anchored to the dock: they may cover messages, never
-   the input or the shelf, and scroll on their own once the list outgrows the box. */
+/* The Ctrl+` terminal dock: a shell under the composer, above the extension
+   shelf and inside .chat-extension-dock with it. Its height is the reader's
+   (useResizablePanel, growthDirection "up"), written to --terminal-dock-height,
+   and the whole column stays inside the chat area so the shelf keeps the bottom.
+   Hidden (`display: none` from the component) it stays mounted: only the layout
+   goes, the PTY and xterm stay. */
+.terminal-dock {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: var(--terminal-dock-height, 280px);
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.terminal-dock-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The top edge: the same affordance as the side panel's handle, lying down. */
+.terminal-dock-resize-handle {
+  position: relative;
+  z-index: 220;
+  height: 8px;
+  flex: 0 0 8px;
+  margin-top: -1px;
+  cursor: row-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.terminal-dock-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  pointer-events: none;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.terminal-dock-resize-handle:hover::after,
+.terminal-dock-resize-handle:focus-visible::after,
+.terminal-dock-resize-handle.is-resizing::after {
+  background: color-mix(in srgb, var(--text-muted) 70%, var(--border));
+}
+
+/* The live extension overlays (background tasks, rpiv-todos) anchor to the whole
+   bottom dock: they float above the bottom terminal and the status shelf, so
+   they may cover messages, never the shell, the input or the shelf, and scroll
+   on their own once the list outgrows the box. */
 .chat-extension-overlays {
   position: absolute;
   z-index: 20;

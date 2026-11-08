@@ -829,6 +829,8 @@ export const enLocale: LocalePlugin = {
     "terminal.close": "Terminate terminal",
     "terminal.restart": "Restart terminal",
     "terminal.reconnect": "Reconnect terminal",
+    "terminal.hideDock": "Hide the terminal panel",
+    "terminal.dockResize": "Resize the terminal panel",
     "terminal.lightTheme": "Switch terminal to light theme",
     "terminal.darkTheme": "Switch terminal to dark theme",
     "terminal.extraKeys": "Terminal keys",
