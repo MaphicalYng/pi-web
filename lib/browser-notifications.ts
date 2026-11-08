@@ -46,10 +46,26 @@ export function claimExtensionAttentionNotification(
   return true;
 }
 
+/**
+ * True inside Electron, whose user agent carries `Electron/<major>`. A browser
+ * never matches it, so the web build keeps its service-worker path.
+ */
+export function isElectronRuntime(userAgent: string | undefined): boolean {
+  return typeof userAgent === "string" && /\bElectron\/\d/.test(userAgent);
+}
+
 function getBrowserEnvironment(): BrowserNotificationEnvironment {
+  // Electron never presents a service worker's `showNotification`
+  // (electron#13041), and its macOS deliveries go through UNNotification, which
+  // the window constructor reaches exactly like a browser's. Preferring the
+  // worker there would swallow every completion notice silently.
+  const serviceWorkerAvailable =
+    typeof navigator !== "undefined" &&
+    !isElectronRuntime(navigator.userAgent) &&
+    "serviceWorker" in navigator;
   return {
     createWindowNotification: (title, options) => new Notification(title, options),
-    getServiceWorkerRegistration: "serviceWorker" in navigator
+    getServiceWorkerRegistration: serviceWorkerAvailable
       ? () => navigator.serviceWorker.getRegistration()
       : null,
   };

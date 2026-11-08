@@ -10,6 +10,10 @@ RUN npm ci --ignore-scripts
 
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# `.dockerignore` leaves `.git` out, so the build's commit id (the version line)
+# arrives here: docker build --build-arg PI_WEB_COMMIT=$(git rev-parse --short HEAD).
+ARG PI_WEB_COMMIT=
+ENV PI_WEB_COMMIT=$PI_WEB_COMMIT
 RUN npm run build
 # What the npm package holds, as `files` in package.json: no build cache, no dev dependencies.
 RUN rm -rf .next/cache && find .next -name '*.js.map' -delete && npm prune --omit=dev

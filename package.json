@@ -45,7 +45,9 @@
     "test:terminal": "node e2e/terminal.mjs",
     "test:e2e": "node e2e/run.mjs",
     "test": "node --experimental-strip-types --test \"app/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\"",
-    "release": "npm version patch -m \"Release v%s\""
+    "release": "npm version patch -m \"Release v%s\"",
+    "build:desktop": "node desktop/packaging/build-desktop.mjs",
+    "smoke:desktop": "node desktop/packaging/smoke-desktop.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.5.0",
@@ -81,6 +83,8 @@
     "@types/semver": "7.8.0",
     "@types/web-push": "^3.6.4",
     "ansi_up": "^6.0.6",
+    "electron": "^45.2.2",
+    "electron-builder": "^26.18.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.4",
     "jiti": "^2.7.0",

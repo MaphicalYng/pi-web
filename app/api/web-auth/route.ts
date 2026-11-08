@@ -19,8 +19,12 @@ import {
 export const dynamic = "force-dynamic";
 
 function isSecureRequest(request: Request): boolean {
-  return new URL(request.url).protocol === "https:"
-    || request.headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim() === "https";
+  try {
+    if (new URL(request.url).protocol === "https:") return true;
+  } catch {
+    // A malformed request URL cannot be trusted as HTTPS.
+  }
+  return request.headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim() === "https";
 }
 
 function tooManyAttempts(retryAfterMs: number): NextResponse {
@@ -53,6 +57,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Untrusted API request" }, { status: 403 });
   }
 
+  // Desktop mode answers exactly like the Web build: the shell's own cookie is
+  // checked by `proxy.ts` before this route, and the password endpoints keep
+  // their Web semantics so the documented desktop+password matrix holds.
   const password = process.env.PI_WEB_PASSWORD;
   const enabled = isWebPasswordEnabled(password);
   const authenticated = !enabled
@@ -110,7 +117,8 @@ export async function DELETE(request: NextRequest) {
   if (!isApiRequestAllowed(request)) {
     return NextResponse.json({ error: "Untrusted API request" }, { status: 403 });
   }
-
+  // Clears only the Web-session cookie; the desktop shell's own cookie is
+  // never touched by this route.
   const response = NextResponse.json({ ok: true });
   clearSessionCookie(response, request);
   return response;

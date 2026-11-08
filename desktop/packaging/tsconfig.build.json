@@ -1,0 +1,37 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "incremental": false,
+    "declaration": false,
+    "sourceMap": false,
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "target": "ES2019",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "types": [
+      "node"
+    ],
+    "plugins": [],
+    "rootDir": "../..",
+    "outDir": "../../dist"
+  },
+  "include": [
+    "../../node_modules/electron/electron.d.ts",
+    "../../desktop/main/**/*.ts",
+    "../../desktop/preload/**/*.ts",
+    "../../desktop/server/**/*.ts",
+    "../../desktop/shared/**/*.ts",
+    "../../lib/desktop-auth.ts",
+    "../../lib/desktop-env.ts"
+  ],
+  "exclude": [
+    "../../**/__tests__/**",
+    "../../**/*.test.mjs"
+  ]
+}

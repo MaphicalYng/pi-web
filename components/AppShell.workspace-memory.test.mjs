@@ -117,6 +117,10 @@ test("New restores the draft after session navigation and workspace auto-restore
         workspaceKeyOf: (value) => value.projectKey ?? value.cwd,
         useCallback: (callback) => callback,
         useGlobalKeyboardShortcuts() {},
+        // The workspace-restore effect announces a session swap. This harness only
+        // evaluates the effect's dependency array, so no-ops are enough.
+        useSessionSwap: () => ({ swapping: false, announce() {}, settle() {} }),
+        announceSessionSwap() {},
         activeNewSessionDraftKeyRef: { current: `new:initial:${cwd}` },
         activeProjectKeyRef: { current: cwd },
         workspaceRestoreTokenRef: { current: 0 },
@@ -226,6 +230,10 @@ test("New in another project adopts it up front and parks the composer's draft",
     workspaceKeyOf: (value) => value.projectKey ?? value.cwd,
     useCallback: (callback) => callback,
     useGlobalKeyboardShortcuts() {},
+    // The workspace-restore effect announces a session swap. This harness only
+    // evaluates the effect's dependency array, so no-ops are enough.
+    useSessionSwap: () => ({ swapping: false, announce() {}, settle() {} }),
+    announceSessionSwap() {},
     activeNewSessionDraftKeyRef: { current: "new:first:/p1" },
     activeProjectKeyRef: { current: "/p1" },
     workspaceRestoreTokenRef: { current: 0 },
@@ -312,6 +320,10 @@ test("the composer's bar moves the fresh composer's draft and model picks instea
     workspaceKeyOf: (value) => value.projectKey ?? value.cwd,
     useCallback: (callback) => callback,
     useGlobalKeyboardShortcuts() {},
+    // The workspace-restore effect announces a session swap. This harness only
+    // evaluates the effect's dependency array, so no-ops are enough.
+    useSessionSwap: () => ({ swapping: false, announce() {}, settle() {} }),
+    announceSessionSwap() {},
     activeNewSessionDraftKeyRef: { current: "new:first:/p1" },
     activeProjectKeyRef: { current: "/p1" },
     workspaceRestoreTokenRef: { current: 0 },
@@ -484,6 +496,10 @@ test("a new session puts the caret in the fresh composer on desktop only (#1313)
     workspaceKeyOf: (value) => value.projectKey ?? value.cwd,
     useCallback: (callback) => callback,
     useGlobalKeyboardShortcuts() {},
+    // The workspace-restore effect announces a session swap. This harness only
+    // evaluates the effect's dependency array, so no-ops are enough.
+    useSessionSwap: () => ({ swapping: false, announce() {}, settle() {} }),
+    announceSessionSwap() {},
     activeNewSessionDraftKeyRef: { current: "new:first:/p1" },
     activeProjectKeyRef: { current: "/p1" },
     workspaceRestoreTokenRef: { current: 0 },

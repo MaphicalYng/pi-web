@@ -6,6 +6,8 @@ export interface TerminalTab {
 }
 
 export const TERMINAL_TABS_KEY = "pi-web:terminal-tabs";
+/** The `Ctrl+`` bottom dock's shell and whether it was open, in this tab. */
+export const TERMINAL_DOCK_KEY = "pi-web:terminal-dock";
 
 export function newTerminalTab(cwd: string): TerminalTab {
   const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -27,4 +29,28 @@ export function restoreTerminalTabs(raw: string | null): { tabs: TerminalTab[]; 
   } catch {
     return { tabs: [], activeId: null, open: false };
   }
+}
+
+export interface TerminalDockState {
+  tab: TerminalTab | null;
+  open: boolean;
+}
+
+/**
+ * The bottom dock's saved shell and its open state. The dock keeps one shell
+ * per page (its own, apart from the right panel's tabs), so a reload reattaches
+ * to that PTY instead of starting a second one.
+ */
+export function restoreTerminalDock(raw: string | null): TerminalDockState {
+  const saved = restoreTerminalTabs(raw);
+  const tab = saved.tabs[0] ?? null;
+  return { tab, open: tab !== null && saved.open };
+}
+
+export function serializeTerminalDock(tab: TerminalTab | null, open: boolean): string {
+  return JSON.stringify({
+    tabs: tab ? [{ id: tab.id, cwd: tab.cwd }] : [],
+    activeId: tab?.id ?? null,
+    open,
+  });
 }

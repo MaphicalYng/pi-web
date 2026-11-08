@@ -13,6 +13,7 @@ import {
   type LoadedMcpConfig,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { createBackgroundTaskHostBridge, type BackgroundTaskHostBridge } from "./background-task-host-client";
 import { McpHost, type McpHostOptions } from "./mcp-host";
 import { createPiWebMcpTransportFactory } from "./mcp-transport";
 import { loadPiSdkInternals, type PiSdkInternals, type PiSdkInternalsResult } from "./pi-sdk-internals";
@@ -344,6 +345,16 @@ function builtin(name: BuiltinExtensionName, factory: ExtensionFactory): InlineE
 }
 
 /**
+ * The `mcp`/`tool-search` built-ins and the MCP host that decides which servers
+ * `mcp` connects; what a subagent's extensions (and the MCP half of a normal
+ * session's) are made of.
+ */
+export interface PiWebMcpBuiltins {
+  extensions: InlineExtension[];
+  mcpHost: McpHost | undefined;
+}
+
+/**
  * `tool-search`, `mcp`, and the host that decides which servers `mcp` connects, in the CLI's
  * order. Servers whose tools only scripts reach register as `deferred` while
  * `codemodeAvailable()` is false. `gate` wraps each built-in's factory.
@@ -356,7 +367,7 @@ function createMcpBuiltins(
     mcpHost?: Pick<McpHostOptions, "idleMs" | "promptWaitMs">;
     gate?: (name: BuiltinExtensionName, factory: ExtensionFactory) => ExtensionFactory;
   },
-): PiWebBuiltinExtensions {
+): PiWebMcpBuiltins {
   const gate = options.gate ?? ((_name, factory) => factory);
   const mcpHost = mcp.available
     ? new McpHost({
@@ -431,7 +442,7 @@ export async function createSubagentMcpExtensions(options: {
   codemode: boolean;
   /** Timing overrides for tests. */
   mcpHost?: Pick<McpHostOptions, "idleMs" | "promptWaitMs">;
-}): Promise<PiWebBuiltinExtensions> {
+}): Promise<PiWebMcpBuiltins> {
   return createMcpBuiltins(await loadMcpRuntime(), {
     agentDir: options.agentDir,
     codemodeAvailable: () => options.codemode,
@@ -453,14 +464,18 @@ export interface PiWebBuiltinExtensionsOptions {
   mcpHost?: Pick<McpHostOptions, "idleMs" | "promptWaitMs">;
 }
 
-export interface PiWebBuiltinExtensions {
-  /** For the resource loader's `extensionFactories`, in the CLI's order, then the MCP host. */
+export interface PiWebBuiltinExtensions extends PiWebMcpBuiltins {
+  /**
+   * For the resource loader's `extensionFactories`: pi-web's own background-task
+   * bridge first (it registers nothing and is not a `builtin:` name), then the CLI's
+   * built-ins in their order, then the MCP host.
+   */
   extensions: InlineExtension[];
-  /** Decides which MCP servers the session connects; undefined while MCP is off. */
-  mcpHost: McpHost | undefined;
+  /** The read-only bridge to pi-background-tasks' Host API (lib/background-task-host-client.ts). */
+  backgroundTaskHost: BackgroundTaskHostBridge;
 }
 
-/** The built-in extensions of a normal session and the host that feeds the MCP one. */
+/** The built-in extensions of a normal session and the hosts that serve pi-web from it. */
 export async function createPiWebBuiltinExtensions(
   options: PiWebBuiltinExtensionsOptions,
 ): Promise<PiWebBuiltinExtensions> {
@@ -470,8 +485,16 @@ export async function createPiWebBuiltinExtensions(
     codemodeAvailable: () => sandbox.available,
     ...(options.mcpHost ? { mcpHost: options.mcpHost } : {}),
   });
+  // A normal session only: Chat only, a side chat and a subagent load none of these
+  // built-ins, and their overlay panel keeps the extension's own summary.
+  const backgroundTaskHost = createBackgroundTaskHostBridge();
   return {
-    extensions: [builtin("codemode", sandbox.available ? createCodemodeExtension() : unavailableExtension), ...extensions],
+    extensions: [
+      backgroundTaskHost.extension,
+      builtin("codemode", sandbox.available ? createCodemodeExtension() : unavailableExtension),
+      ...extensions,
+    ],
     mcpHost,
+    backgroundTaskHost,
   };
 }

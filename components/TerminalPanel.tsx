@@ -19,6 +19,7 @@ import {
   type TerminalModifiers,
 } from "@/lib/terminal-extra-keys";
 import type { TerminalEvent } from "@/lib/terminal-manager";
+import { NO_SHELL_INPUT, trackShellInput, type ShellInputState } from "@/lib/terminal-shell-input";
 import { TERMINAL_XTERM_THEMES } from "@/lib/terminal-theme";
 import { TerminalExtraKeys, useTerminalExtraKeysVisible } from "./TerminalExtraKeys";
 import type { TerminalTab } from "./terminal-tab-state";
@@ -29,17 +30,25 @@ interface Props {
   onRestart: () => void;
   onClosed: () => void;
   onCloseError: () => void;
+  /** Given by the bottom dock only: hides the panel and keeps the shell running. */
+  onHide?: () => void;
+  /** Given by the bottom dock only: ends the shell (the right panel closes its tabs instead). */
+  onTerminate?: () => void;
+  /** Given by the bottom dock only: the reader ended the shell themselves, with `exit`. */
+  onExit?: (exitCode: number | null) => void;
 }
 
-export function TerminalPanel({ tab, active, onRestart, onClosed, onCloseError }: Props) {
+export function TerminalPanel({ tab, active, onRestart, onClosed, onCloseError, onHide, onTerminate, onExit }: Props) {
   const { t } = useI18n();
   const { id, cwd, restored } = tab;
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const startRef = useRef<Promise<void>>(Promise.resolve());
   const writerRef = useRef<ReturnType<typeof createTerminalWriter> | null>(null);
-  const callbacksRef = useRef({ onClosed, onCloseError });
-  callbacksRef.current = { onClosed, onCloseError };
+  const callbacksRef = useRef({ onClosed, onCloseError, onExit });
+  callbacksRef.current = { onClosed, onCloseError, onExit };
+  // What is being typed, to tell an `exit` the reader chose from a shell that ended on its own.
+  const shellInputRef = useRef<ShellInputState>(NO_SHELL_INPUT);
   const [status, setStatus] = useState<"connecting" | "ready" | "exited" | "error">("connecting");
   const [error, setError] = useState<string | null>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
@@ -87,6 +96,7 @@ export function TerminalPanel({ tab, active, onRestart, onClosed, onCloseError }
     setStatus("connecting");
     setError(null);
     setExitCode(null);
+    shellInputRef.current = NO_SHELL_INPUT;
 
     const readTerminalFont = () => {
       const style = getComputedStyle(container);
@@ -127,6 +137,8 @@ export function TerminalPanel({ tab, active, onRestart, onClosed, onCloseError }
     });
     writerRef.current = writer;
     const onData = terminal.onData((data) => {
+      // Tracked before the modifiers rewrite it: this is what the reader typed.
+      shellInputRef.current = trackShellInput(shellInputRef.current, data);
       if (connected && !exited && !inputFailed) writer.write(applyTerminalModifiers(data, consumeModifiers()));
     });
     const fitAndResize = () => {
@@ -168,8 +180,12 @@ export function TerminalPanel({ tab, active, onRestart, onClosed, onCloseError }
           connected = false;
           terminal.options.disableStdin = true;
           events?.close();
-          setExitCode(event.type === "exit" ? event.exitCode : null);
+          const code = event.type === "exit" ? event.exitCode : null;
+          setExitCode(code);
           setStatus("exited");
+          // Only the reader's own `exit` closes the dock; a killed or crashed shell keeps its pane
+          // and the exit notice that says how it ended.
+          if (shellInputRef.current.exitCommand) callbacksRef.current.onExit?.(code);
         }
       };
       events.onopen = () => {
@@ -305,6 +321,20 @@ export function TerminalPanel({ tab, active, onRestart, onClosed, onCloseError }
               <path d="M20 11a8 8 0 1 0-2.34 5.66" /><polyline points="20 4 20 11 13 11" />
             </svg>
           </button>
+          {onHide && (
+            <button type="button" onClick={onHide} title={t("terminal.hideDock")} aria-label={t("terminal.hideDock")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          )}
+          {onTerminate && (
+            <button type="button" onClick={onTerminate} disabled={Boolean(tab.closing)} title={t("terminal.close")} aria-label={t("terminal.close")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+              </svg>
+            </button>
+          )}
         </div>
       </header>
       <div>

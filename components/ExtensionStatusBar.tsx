@@ -64,15 +64,22 @@ export function ExtensionStatusBar({
   widgets = [],
   onCommand,
   commandsDisabled = false,
+  buildVersion = null,
 }: {
   statuses: ExtensionStatusItem[];
   widgets?: ExtensionWidgetItem[];
   /** Sends the command of a `command:` status; without it those buttons stay disabled. */
   onCommand?: (command: string) => void;
   commandsDisabled?: boolean;
+  /**
+   * The build in use, at the row's right end (`版本号：0.15.0-imp-5d8d631`, the
+   * label already in it). Null hides the cell; the shelf then keeps its old
+   * rule of showing nothing at all when an extension reported nothing.
+   */
+  buildVersion?: string | null;
 }) {
   const cells = buildExtensionStatusCells(statuses);
-  if (cells.length === 0 && widgets.length === 0) return null;
+  if (cells.length === 0 && widgets.length === 0 && !buildVersion) return null;
 
   const hasCommands = cells.some((cell) => cell.kind === "command");
   const plainStatusLine = cells
@@ -110,9 +117,16 @@ export function ExtensionStatusBar({
 
   return (
     <div
-      className={`extension-status-shelf${widgets.length > 0 ? " has-widgets" : ""}${cells.length > 0 ? " has-status" : ""}${hasCommands ? " has-commands" : ""}`}
+      className={`extension-status-shelf${widgets.length > 0 ? " has-widgets" : ""}${cells.length > 0 ? " has-status" : ""}${hasCommands ? " has-commands" : ""}${buildVersion ? " has-build" : ""}`}
     >
       {widgets.length > 0 ? <ExtensionWidgets widgets={widgets}>{statusLine}</ExtensionWidgets> : statusLine}
+      {/* Never scrolled away with the statuses and the widget triggers: the row
+          keeps its own scroll box, this cell stands beside it. */}
+      {buildVersion ? (
+        <div className="extension-status-build" title={buildVersion}>
+          {buildVersion}
+        </div>
+      ) : null}
     </div>
   );
 }
