@@ -57,6 +57,11 @@ test("an incomplete standalone root is reported by name, never by path", () => {
 });
 
 test("installing a session makes desktop mode and validates only that secret", () => {
+  // The suite may itself run inside the desktop backend, whose environment is
+  // already desktop mode; the assertion is about installing a session, not
+  // about how the test process was started.
+  const savedMode = process.env.PI_WEB_DESKTOP;
+  delete process.env.PI_WEB_DESKTOP;
   auth.clearDesktopAuthContext();
   assert.equal(auth.isDesktopMode(), false);
   config.installDesktopSession(SESSION);
@@ -67,6 +72,8 @@ test("installing a session makes desktop mode and validates only that secret", (
     assert.equal(auth.hasValidDesktopSession({ headers: { get: () => "__pi-web-session=a" } }, auth.getDesktopAuthContext()), false);
   } finally {
     auth.clearDesktopAuthContext();
+    if (savedMode === undefined) delete process.env.PI_WEB_DESKTOP;
+    else process.env.PI_WEB_DESKTOP = savedMode;
   }
 });
 

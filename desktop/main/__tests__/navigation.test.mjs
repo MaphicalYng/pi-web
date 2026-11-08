@@ -55,9 +55,12 @@ test("linkAction separates in-app navigation, external links and everything else
   assert.equal(linkAction("file:///etc/passwd", ORIGIN), "deny");
   assert.equal(linkAction("javascript:alert(1)", ORIGIN), "deny");
   assert.equal(linkAction("myapp://open", ORIGIN), "deny");
-  assert.equal(linkAction(`${ORIGIN}/session/1`, null), "deny");
-  assert.equal(linkAction("http://127.0.0.1:9/anything", ORIGIN), "deny");
-  assert.equal(linkAction("http://127.0.0.1:9/", null), "deny");
+  // Before the origin is known a link cannot be classified as in-app, so http(s)
+  // still goes to the browser; the window itself never navigates there.
+  assert.equal(linkAction(`${ORIGIN}/session/1`, null), "external");
+  // A loopback URL on another port is a real link: it opens in the browser.
+  assert.equal(linkAction("http://127.0.0.1:9/anything", ORIGIN), "external");
+  assert.equal(linkAction("http://127.0.0.1:9/", null), "external");
 });
 
 test("same-origin navigation stays in place without preventDefault", () => {
@@ -81,28 +84,36 @@ test("a same-origin will-navigate continues in place with no external hand-off",
   assert.equal(logs.length, 0);
 });
 
-test("a loopback URL is blocked unless it matches the known origin, and never opened externally", () => {
+test("a loopback URL on another port opens in the browser, never in an app window", () => {
   const known = makeGuards();
   const otherPort = new FakeEvent();
   known.handlers["will-navigate"](otherPort, "http://127.0.0.1:9/");
   assert.equal(otherPort.prevented, 1);
-  assert.deepEqual(known.opened, []);
-  assert.deepEqual(known.created, []);
+  assert.deepEqual(known.opened, ["http://127.0.0.1:9/"]);
+  assert.deepEqual(known.created, [], "another local page must not become a second app window");
 
+  // The app's own origin still navigates inside the window and never leaves it.
+  const inApp = new FakeEvent();
+  known.handlers["will-navigate"](inApp, `${ORIGIN}/chat`);
+  assert.equal(inApp.prevented, 0);
+  assert.deepEqual(known.opened, ["http://127.0.0.1:9/"]);
+});
+
+test("an unknown origin cannot navigate but still opens http(s) links in the browser", () => {
   const unknown = makeGuards(null);
   for (const url of [`${ORIGIN}/`, "http://127.0.0.1:9/"]) {
     const event = new FakeEvent();
     unknown.handlers["will-navigate"](event, url);
     assert.equal(event.prevented, 1, url);
   }
-  assert.deepEqual(unknown.opened, []);
-  assert.equal(unknown.logs[0].event, "window.navigation_blocked");
-  assert.equal(unknown.logs[0].fields.scheme, "http:");
+  assert.deepEqual(unknown.opened, [`${ORIGIN}/`, "http://127.0.0.1:9/"]);
+  assert.deepEqual(unknown.created, []);
 
-  const external = new FakeEvent();
-  unknown.handlers["will-navigate"](external, "https://example.com/docs");
-  assert.equal(external.prevented, 1);
-  assert.deepEqual(unknown.opened, ["https://example.com/docs"]);
+  const blocked = new FakeEvent();
+  unknown.handlers["will-navigate"](blocked, "file:///etc/passwd");
+  assert.equal(blocked.prevented, 1);
+  assert.equal(unknown.logs.at(-1).event, "window.navigation_blocked");
+  assert.equal(unknown.logs.at(-1).fields.scheme, "file:");
 });
 
 test("external links open exactly once and blocked schemes never reach the OS", () => {
@@ -128,7 +139,8 @@ test("window.open always denies but routes same-origin and external targets safe
   assert.deepEqual(handler({ url: `${ORIGIN}/session/3` }), { action: "deny" });
   assert.deepEqual(created, [`${ORIGIN}/session/3`]);
   assert.deepEqual(handler({ url: "https://example.com" }), { action: "deny" });
-  assert.deepEqual(opened, ["https://example.com"]);
+  assert.deepEqual(handler({ url: "http://127.0.0.1:60378/doc/d1?token=x" }), { action: "deny" });
+  assert.deepEqual(opened, ["https://example.com", "http://127.0.0.1:60378/doc/d1?token=x"]);
   assert.deepEqual(handler({ url: "data:text/html,x" }), { action: "deny" });
   assert.equal(logs.at(-1).event, "window.open_blocked");
 });
