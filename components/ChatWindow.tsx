@@ -1,5 +1,6 @@
 "use client";
 import { registerAbortHandler } from "@/hooks/useKeyboardShortcuts";
+import { BUILD_VERSION, BUILD_VERSION_TAG } from "@/lib/build-version";
 import { isHiddenRelation, SIDE_BOUNDARY_MESSAGE_TYPE } from "@/lib/session-family";
 import Image from "next/image";
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -1511,7 +1512,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                 <div className="new-session-brand-text">
                   <span className="new-session-brand-name">Pi Web</span>
                   <span className="new-session-meta">
-                    <span>web v{process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}</span>
+                    <span className="new-session-meta-version">{BUILD_VERSION_TAG}</span>
                     <NewSessionUpdateLink label={(version) => t("appUpdate.releaseNotes", { version })} />
                     <span aria-hidden="true">·</span>
                     <span className="new-session-meta-pi">pi v{process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}</span>
@@ -1537,6 +1538,9 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
           <ExtensionStatusBar
             statuses={chatOverlays.remainingStatuses}
             widgets={chatOverlays.remainingWidgets}
+            // One version on screen: this footer carries it except under a
+            // fresh composer, whose brand line shows the same build.
+            buildVersion={isEmptyNew ? null : t("footer.buildVersion", { version: BUILD_VERSION })}
             onCommand={handleSend}
             commandsDisabled={sessionBusy}
           />

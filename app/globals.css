@@ -1162,6 +1162,37 @@ button.extension-widget-trigger:focus-visible {
   opacity: 0.5;
 }
 
+/* The build in use, at the status row's right end: never scrolled away with the
+   statuses, never a reason for the shelf to grow a second line. It gives way
+   first when the chat is narrow, its whole text kept in the tooltip. */
+.extension-status-shelf.has-build > .extension-status-row {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.extension-status-build {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+  margin-left: auto;
+  padding: 8px 12px;
+  border-left: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+}
+
+/* Alone in the row there is nothing to divide from. */
+.extension-status-shelf:not(.has-status):not(.has-widgets) > .extension-status-build {
+  border-left: 0;
+}
+
 /* Touch screens get taller cells when there is something to tap, widget triggers
    included, so the row stays level. */
 @media (pointer: coarse) {
@@ -2400,7 +2431,11 @@ pre, code {
   flex: none;
 }
 
-.new-session-meta > .new-session-meta-pi {
+/* The build (pi-web's version, the flavor and the commit) and pi's version:
+   the two that give way before the line wraps or runs under the logo. Each
+   keeps its ellipsis, so a narrow window cuts them instead of overflowing. */
+.new-session-meta > .new-session-meta-pi,
+.new-session-meta > .new-session-meta-version {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;

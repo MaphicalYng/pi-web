@@ -229,3 +229,30 @@ test("without widgets there is no shared row, and without status the row holds o
   assert.match(html, /extension-status-row/);
   assert.doesNotMatch(html, /extension-status-line/);
 });
+
+test("the build in use sits after the row, outside its scroll box", () => {
+  const html = renderStatusBar({
+    statuses: [{ key: "status", text: "connected" }],
+    widgets: [{ key: "usage", lines: ["a"], placement: "aboveEditor" }],
+    buildVersion: "版本号：0.15.0-imp-5d8d631",
+  });
+  const row = html.indexOf("</div></div>");
+  const cell = html.indexOf('class="extension-status-build"');
+
+  assert.ok(cell !== -1, "the version cell renders");
+  assert.ok(row !== -1 && cell > row, "it comes after the row, its sibling");
+  assert.match(html, /extension-status-shelf has-widgets has-status has-build/);
+  // The row keeps its own scroll box; the cell is never inside it.
+  assert.equal(html.split("extension-status-build").length - 1, 1);
+  assert.match(html, /title="版本号：0\.15\.0-imp-5d8d631"/);
+});
+
+test("a build version alone still draws the shelf", () => {
+  const alone = renderStatusBar({ statuses: [], buildVersion: "Version: 0.15.0-imp-5d8d631" });
+
+  assert.match(alone, /class="extension-status-shelf has-build"/);
+  assert.match(alone, /class="extension-status-build"/);
+  assert.doesNotMatch(alone, /extension-status-line/);
+  // Its old rule stands when nothing at all would show.
+  assert.equal(renderStatusBar({ statuses: [], buildVersion: null }), "");
+});

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { execFileSync } from "child_process";
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -24,6 +25,37 @@ const desktopBuild = process.env.PI_WEB_DESKTOP_BUILD === "1";
 const desktopDistDir = desktopBuild
   ? process.env.PI_WEB_DESKTOP_DIST_DIR?.trim()
   : undefined;
+
+// The commit the build came from, for the version line (the chat's footer, a
+// fresh composer's brand). A Docker or CI checkout has no `.git`, so it passes
+// PI_WEB_COMMIT; a local build reads HEAD. Neither is fatal: the line then says
+// `unknown` instead of a commit id.
+function resolveCommit(): string {
+  const given = process.env.PI_WEB_COMMIT?.trim();
+  if (given) return given;
+  try {
+    const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: configDir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return head.length > 0 ? head : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+// Only a desktop build has a shell version of its own (desktop/version.json).
+// A web build bakes an empty string, which the version line reads as "web"; a
+// desktop build without the file is a broken package, so it fails here.
+function resolveDesktopVersion(): string {
+  if (!desktopBuild) return "";
+  const file = join(configDir, "desktop", "version.json");
+  const parsed = JSON.parse(readFileSync(file, "utf8")) as { version?: string };
+  const desktopVersion = parsed.version?.trim();
+  if (!desktopVersion) throw new Error("desktop/version.json must carry the desktop shell's version");
+  return desktopVersion;
+}
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: configDir,
@@ -119,6 +151,8 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
     NEXT_PUBLIC_PI_VERSION: piVersion,
+    NEXT_PUBLIC_APP_COMMIT: resolveCommit(),
+    NEXT_PUBLIC_DESKTOP_VERSION: resolveDesktopVersion(),
   },
 };
 
