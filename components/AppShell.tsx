@@ -29,6 +29,7 @@ import { useIsMobile, useIsNarrowMobile } from "@/hooks/useIsMobile";
 import { useViewportHeight } from "@/hooks/useViewportHeight";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useAudio } from "@/hooks/useAudio";
+import { useSessionSwap } from "@/hooks/useSessionSwap";
 import { copyText } from "@/lib/clipboard";
 import { getFileName } from "@/lib/file-paths";
 import { buildAtMentionText, buildFileAtMentionsText, buildFileLineMentionText } from "@/lib/file-fuzzy";
@@ -224,6 +225,9 @@ export function AppShell() {
   const [initialCwdError, setInitialCwdError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [sessionKey, setSessionKey] = useState(0);
+  // The chat remounts on every switch (the key below), so the fade's "this is a
+  // switch, not a first paint" flag has to live out here.
+  const { swapping: sessionSwapping, announce: announceSessionSwap, settle: settleSessionSwap } = useSessionSwap();
   const sessionScrollPositionsRef = useRef(new Map<string, ChatScrollPosition>());
   const handleSessionScrollPositionChange = useCallback((sessionId: string, position: ChatScrollPosition) => {
     sessionScrollPositionsRef.current.set(sessionId, position);
@@ -967,6 +971,8 @@ export function AppShell() {
     }
     setNewSessionCwd(null);
     setSelectedSession(session);
+    // A restore is the page opening on a session: nothing was replaced.
+    if (!isRestore) announceSessionSwap();
     setSessionKey((k) => k + 1);
     setBranchTree([]);
     setBranchActiveLeafId(null);
@@ -991,7 +997,7 @@ export function AppShell() {
     if (!isRestore || new URLSearchParams(window.location.search).get("session") !== session.id) {
       router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
     }
-  }, [activeCwd, changeFileWorkspace, invalidateWorkspaceRestore, router, isMobile, newSessionCwd, selectedSession]);
+  }, [activeCwd, changeFileWorkspace, invalidateWorkspaceRestore, router, isMobile, newSessionCwd, selectedSession, announceSessionSwap]);
 
   const handleNewSession = useCallback((sessionId: string, cwd: string, projectKey?: string | null, options?: NewSessionOptions) => {
     invalidateWorkspaceRestore();
@@ -2293,20 +2299,20 @@ export function AppShell() {
       @keyframes session-info-pop {
         0% {
           opacity: 0;
-          transform: translateY(-24px);
+          transform: translateY(-18px) scale(0.98);
           filter: blur(6px);
           box-shadow: 0 2px 8px rgba(0,0,0,0);
         }
         55% {
           opacity: 1;
-          transform: translateY(0);
+          transform: translateY(0) scale(1);
           filter: blur(0);
           background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
           box-shadow: 0 18px 44px rgba(37,99,235,0.16);
         }
         100% {
           opacity: 1;
-          transform: translateY(0);
+          transform: translateY(0) scale(1);
           filter: blur(0);
           background: var(--bg-panel);
           box-shadow: 0 10px 28px rgba(0,0,0,0.10);
@@ -2329,8 +2335,11 @@ export function AppShell() {
         position: relative;
         overflow: hidden;
         transform-origin: top right;
-        animation: session-info-pop 360ms ease-out both;
-        will-change: transform, opacity, filter, background, box-shadow;
+        animation: session-info-pop 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        /* Only the two compositable properties are hinted: background and
+           box-shadow are not compositable, so hinting them allocated layers
+           for nothing. */
+        will-change: transform, opacity;
       }
       .session-info-popover::after {
         content: "";
@@ -2341,7 +2350,7 @@ export function AppShell() {
         width: 44%;
         pointer-events: none;
         background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 24%, transparent), transparent);
-        animation: session-info-light-wash 620ms ease-out both;
+        animation: session-info-light-wash 400ms cubic-bezier(0.23, 1, 0.32, 1) both;
       }
       @media (prefers-reduced-motion: reduce) {
         .session-info-popover,
@@ -2815,6 +2824,8 @@ export function AppShell() {
           {showChat ? (
             <ChatWindow
               key={sessionKey}
+              swapping={sessionSwapping}
+              onSwapSettled={settleSessionSwap}
               session={selectedSession}
               searchTarget={searchTarget?.sessionId === selectedSession?.id ? searchTarget : null}
               onSearchTargetHandled={handleSearchTargetHandled}

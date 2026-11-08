@@ -1,5 +1,6 @@
 "use client";
 import { registerAbortHandler } from "@/hooks/useKeyboardShortcuts";
+import { SESSION_SWAP_MS } from "@/hooks/useSessionSwap";
 import { BUILD_VERSION, BUILD_VERSION_TAG } from "@/lib/build-version";
 import { isHiddenRelation, SIDE_BOUNDARY_MESSAGE_TYPE } from "@/lib/session-family";
 import Image from "next/image";
@@ -101,8 +102,20 @@ interface Props {
   unlockAudio?: () => void;
   /** Keeps the completion sound's audio running until the returned release is called. */
   holdAudio?: () => () => void;
+  /**
+   * The session on screen was just switched to: fade the transcript in.
+   *
+   * The chat remounts on a new session (`AppShell` keys it by `sessionKey`), so
+   * it cannot tell a switch from a first paint itself - that decision is
+   * `useSessionSwap`'s, one level up.
+   */
+  swapping?: boolean;
+  /** Told once the switch's fade is over (or at once, when nothing fades). */
+  onSwapSettled?: () => void;
 }
 const CHAT_MINIMAP_WIDTH = 36;
+// How long the empty session's hero takes to fade out over the first message.
+const HERO_EXIT_MS = 140;
 const CHAT_COLUMN_PADDING = 16;
 
 // One update check per page. Every fresh composer mounts the header again
@@ -257,7 +270,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, durationMs, cacheMis
   );
 }
 
-export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, newSessionContextBar, initialNewSessionChoices, onNewSessionChoicesChange, onAgentEnd, onToolEnd, onAttentionNeeded, onSessionCreated, onSessionForked, panel = false, onSideSession, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onDebugSnapshotReaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onOpenSettings, onContextUsageChange, onOpenFile, onFilesUploaded, onOpenSubagent, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio, holdAudio }: Props) {
+export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, newSessionContextBar, initialNewSessionChoices, onNewSessionChoicesChange, onAgentEnd, onToolEnd, onAttentionNeeded, onSessionCreated, onSessionForked, panel = false, onSideSession, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onDebugSnapshotReaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onOpenSettings, onContextUsageChange, onOpenFile, onFilesUploaded, onOpenSubagent, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio, holdAudio, swapping = false, onSwapSettled }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const completionNotificationsEnabled = !isHiddenRelation(session?.relation);
@@ -846,6 +859,42 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   }, [messages.length]);
 
   const isEmptyNew = isNew && messages.length === 0 && !isStreaming && !sessionBusy;
+  // The hero's exit: sending the first message used to replace the brand and
+  // the composer's context row on a frame - the largest jump in the app. It now
+  // fades out over the transcript. The staying-out-of-flow part is what makes
+  // the fade harmless: the hero keeps no height while it fades, so the first
+  // message is already at its final position and the input keeps focus.
+  const [heroLeaving, setHeroLeaving] = useState(false);
+  const wasEmptyNewRef = useRef(isEmptyNew);
+  useEffect(() => {
+    if (!wasEmptyNewRef.current || isEmptyNew) {
+      wasEmptyNewRef.current = isEmptyNew;
+      return;
+    }
+    wasEmptyNewRef.current = isEmptyNew;
+    setHeroLeaving(true);
+    const timer = setTimeout(() => setHeroLeaving(false), HERO_EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [isEmptyNew]);
+
+  // The switch's fade belongs to the moment the transcript is actually on
+  // screen, not to the click: the chat remounts into its loading screen, and a
+  // session can take far longer than one animation to load. It also has to wait
+  // for the scroll restore, which keeps the transcript `visibility: hidden` -
+  // starting earlier spent the animation unseen and left only its tail visible.
+  // One condition drives both the class and the settle timer, so they can never
+  // disagree.
+  const transcriptVisible = !loading && !isEmptyNew && !error && !pendingScrollRestore;
+  useEffect(() => {
+    if (!swapping) return;
+    if (isEmptyNew || error) {
+      onSwapSettled?.();
+      return;
+    }
+    if (!transcriptVisible) return;
+    const timer = setTimeout(() => onSwapSettled?.(), SESSION_SWAP_MS);
+    return () => clearTimeout(timer);
+  }, [swapping, transcriptVisible, isEmptyNew, error, onSwapSettled]);
   useScrollbarVisibility(scrollContainerRef, Boolean(session?.id) || !isEmptyNew);
   const messageCwd = session?.cwd ?? newSessionCwd ?? undefined;
   const promptAnchorSpacerRef = useRef<HTMLDivElement | null>(null);
@@ -1013,8 +1062,8 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-text-muted">
-         {t("chat.loadingSession")}
+      <div className="chat-loading flex h-full items-center justify-center">
+        <span className="chat-loading-text">{t("chat.loadingSession")}</span>
       </div>
     );
   }
@@ -1101,10 +1150,10 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
           // so it shows its scrollbar instead of hiding it behind the minimap (#788).
           // A stable gutter keeps the centred column from shifting when a short
           // session grows past one screen.
-          className="scrollbar-subtle min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-4 [scrollbar-gutter:stable]"
+          className={`chat-transcript scrollbar-subtle min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-4 [scrollbar-gutter:stable]${swapping && transcriptVisible ? " is-swapping" : ""}`}
           style={{ visibility: pendingScrollRestore ? "hidden" : undefined }}
         >
-          <div style={{ minWidth: 0, padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
+          <div className="chat-transcript-inner" style={{ minWidth: 0, padding: `0 ${CHAT_COLUMN_PADDING}px` }}>
             <div ref={messageContentRef} onPointerUp={captureQuotedSelection} style={{ width: "100%", minWidth: 0, maxWidth: "var(--chat-content-max-width, 820px)", margin: "0 auto" }}>
             {(() => {
               let lastUserIdx = -1;
@@ -1504,7 +1553,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
             composer's left edge (.new-session-brand, .new-session-meta and
             .new-session-context in app/globals.css; the side padding and
             width are inline here). */}
-        {isEmptyNew && (
+        {isEmptyNew && <>
           <div className="new-session-hero" style={{ paddingLeft: 16, paddingRight: isMobile ? 16 : 52 }}>
             <div className="new-session-hero-inner" style={{ maxWidth: "var(--chat-content-max-width, 820px)" }}>
               <div className="new-session-brand">
@@ -1520,6 +1569,34 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                 </div>
               </div>
               {newSessionContextBar}
+            </div>
+          </div>
+        </>}
+        {/* The leaving hero: no height of its own (height 0 wrapper), so the
+            transcript is already where it belongs while the brand fades out
+            over it - a cross-fade, not a jump followed by a jump. */}
+        {!isEmptyNew && heroLeaving && (
+          <div style={{ position: "relative", height: 0, zIndex: 5 }} aria-hidden="true">
+            <div
+              className="new-session-hero is-leaving"
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                paddingLeft: 16,
+                paddingRight: isMobile ? 16 : 52,
+                pointerEvents: "none",
+              }}
+            >
+              <div className="new-session-hero-inner" style={{ maxWidth: "var(--chat-content-max-width, 820px)" }}>
+                <div className="new-session-brand">
+                  <Image src="/icons/apple-touch-icon.png" width={40} height={40} alt="" className="new-session-logo" />
+                  <div className="new-session-brand-text">
+                    <span className="new-session-brand-name">Pi Web</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1651,12 +1728,14 @@ function NoticeShelf({ notices, floating = false, onPauseChange }: { notices: No
               fontSize: 14,
               lineHeight: 1.5,
               transformOrigin: "top right",
-              // Use backwards fill for the entrance animation so height styles return to
-              // inline styles once it finishes; otherwise the keyframe's fixed 60px would
-              // stick around in fill mode and permanently clamp the expanded toast
+              // Entrance and exit animate opacity and transform only. The card
+              // takes its finished height at once: animating height, max-height,
+              // min-height and margin re-laid-out the whole transcript per frame.
+              // The fill mode still matters for the exit (the card stays faded
+              // until it unmounts).
               animation: notice.exiting
-                ? "notice-shelf-out 0.18s ease-in forwards"
-                : "notice-shelf-in 0.18s ease-out backwards",
+                ? "notice-shelf-out 180ms var(--ease-out) forwards"
+                : "notice-shelf-in 180ms var(--ease-out) backwards",
               padding: "0 12px",
             }}
           >

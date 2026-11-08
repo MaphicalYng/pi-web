@@ -111,6 +111,12 @@ export interface SessionTreeProps {
   onShowMore(key: string): void;
   /** Back to the base limit; key is a projectKey or PINNED_MORE_KEY. */
   onShowLess(key: string): void;
+  /**
+   * Rows a "show more" just revealed: they fade in once, so the list does not
+   * jump under the pointer. Virtualized rows remount while scrolling, so this is
+   * only ever the window a click opened - never every row that mounts.
+   */
+  enteringKeys?: ReadonlySet<string>;
   onTogglePinned(): void;
   onArchiveFamily(family: SessionFamily): void;
   onRestoreFamily(family: SessionFamily): void;
@@ -180,6 +186,7 @@ export function SessionTree(props: SessionTreeProps): ReactNode {
     renamingProjectKey,
     confirmDeleteRootId,
     activeMenuRowKey,
+    enteringKeys,
     reveal,
   } = props;
   const { t } = useI18n();
@@ -440,6 +447,7 @@ export function SessionTree(props: SessionTreeProps): ReactNode {
                     renaming={row.family.root.id === renamingRootId}
                     confirming={row.family.root.id === confirmDeleteRootId}
                     menuOpen={menuOpen}
+                    entering={enteringKeys?.has(row.key) ?? false}
                     handlers={handlersRef}
                   />
                 );
@@ -502,6 +510,7 @@ const SessionRowView = memo(function SessionRowView({
   renaming,
   confirming,
   menuOpen,
+  entering,
   handlers,
 }: {
   row: SessionRow;
@@ -512,6 +521,7 @@ const SessionRowView = memo(function SessionRowView({
   renaming: boolean;
   confirming: boolean;
   menuOpen: boolean;
+  entering: boolean;
   handlers: Handlers;
 }) {
   const { locale, t } = useI18n();
@@ -527,6 +537,7 @@ const SessionRowView = memo(function SessionRowView({
     menuOpen ? "is-menu-open" : "",
     confirming ? "is-confirming" : "",
     renaming ? "is-renaming" : "",
+    entering ? "is-entering" : "",
   ].filter(Boolean).join(" ");
 
   if (confirming) {

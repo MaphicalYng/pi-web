@@ -41,11 +41,16 @@ export interface SidebarToastProps {
 /** Long enough to read the message and reach Undo; hovering or focusing it pauses the countdown. */
 const DEFAULT_TOAST_DURATION_MS = 10_000;
 
+/** How long a dismissed toast keeps its card on the page to fade out. */
+const TOAST_EXIT_MS = 140;
+
 interface ToastCardProps {
   toast: SidebarToastData;
   dismissLabel: string;
   durationMs: number;
   onDismissRef: { readonly current: () => void };
+  /** The card is fading out: no countdown, no pointer, nothing announced. */
+  leaving?: boolean;
 }
 
 /**
@@ -53,11 +58,11 @@ interface ToastCardProps {
  * animation and its timer start once, and a re-render of the same toast
  * restarts neither.
  */
-function SidebarToastCard({ toast, dismissLabel, durationMs, onDismissRef }: ToastCardProps) {
+function SidebarToastCard({ toast, dismissLabel, durationMs, onDismissRef, leaving = false }: ToastCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
-  const paused = hovered || focused;
+  const paused = leaving || hovered || focused;
 
   // A toast that replaces another under a still mouse gets no pointerenter
   // until the mouse moves; it is hovered all the same. (A touch screen keeps
@@ -77,7 +82,9 @@ function SidebarToastCard({ toast, dismissLabel, durationMs, onDismissRef }: Toa
   return (
     <div
       ref={cardRef}
-      className="sidebar-toast"
+      className={leaving ? "sidebar-toast is-leaving" : "sidebar-toast"}
+      aria-hidden={leaving ? true : undefined}
+      style={leaving ? { pointerEvents: "none" } : undefined}
       // Only a mouse pauses it: a tap would leave it "hovered" until the next
       // tap elsewhere, and the toast would never go.
       onPointerEnter={(event) => {
@@ -102,6 +109,7 @@ function SidebarToastCard({ toast, dismissLabel, durationMs, onDismissRef }: Toa
           key={action.id}
           type="button"
           className="sidebar-toast-action"
+          tabIndex={leaving ? -1 : undefined}
           onClick={() => {
             // Dismissed first, so a toast the action shows itself (Undo
             // failed) replaces this one instead of being dismissed with it.
@@ -117,6 +125,7 @@ function SidebarToastCard({ toast, dismissLabel, durationMs, onDismissRef }: Toa
         className="sidebar-toast-dismiss"
         aria-label={dismissLabel}
         title={dismissLabel}
+        tabIndex={leaving ? -1 : undefined}
         onClick={() => onDismissRef.current()}
       >
         <CloseIcon size={12} />
@@ -129,6 +138,24 @@ export function SidebarToast({ toast, onDismiss, dismissLabel, durationMs = DEFA
   const onDismissRef = useRef(onDismiss);
   onDismissRef.current = onDismiss;
 
+  // A dismissed toast stays on the page for its fade-out. Without it the card
+  // disappeared on a frame; a new toast still replaces the old one instantly
+  // (its own key remounts the card and restarts the entrance).
+  const [leaving, setLeaving] = useState<SidebarToastData | null>(null);
+  const previousToastRef = useRef<SidebarToastData | null>(toast);
+  useEffect(() => {
+    const previous = previousToastRef.current;
+    previousToastRef.current = toast;
+    if (toast) {
+      setLeaving(null);
+      return;
+    }
+    if (!previous) return;
+    setLeaving(previous);
+    const timer = window.setTimeout(() => setLeaving(null), TOAST_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
   // The live region stays on the page while empty, so a screen reader is
   // already watching it when a toast appears in it.
   return (
@@ -140,6 +167,15 @@ export function SidebarToast({ toast, onDismiss, dismissLabel, durationMs = DEFA
           dismissLabel={dismissLabel}
           durationMs={durationMs}
           onDismissRef={onDismissRef}
+        />
+      ) : leaving ? (
+        <SidebarToastCard
+          key={leaving.id}
+          toast={leaving}
+          dismissLabel={dismissLabel}
+          durationMs={durationMs}
+          onDismissRef={onDismissRef}
+          leaving
         />
       ) : null}
     </div>

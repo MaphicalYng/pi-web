@@ -111,6 +111,18 @@ function groupRow(extra = {}, projectExtra = {}) {
 
 const footer = [{ kind: "footer-open", key: "footer-open" }];
 
+test("only the rows a show-more revealed are marked as entering", () => {
+  const revealed = session("revealed");
+  const kept = session("kept");
+  const rows = [sessionRow(revealed), sessionRow(kept)];
+  // The list is virtualized: rows remount while scrolling, so an entrance
+  // animation may only ever be asked for by key, never by mounting.
+  assert.match(rowMarkup(render({ rows, enteringKeys: new Set([`session:group:${revealed.id}`]) }), `session:group:${revealed.id}`), /class="session-tree-row session-tree-session is-entering"/);
+  assert.match(rowMarkup(render({ rows, enteringKeys: new Set([`session:group:${revealed.id}`]) }), `session:group:${kept.id}`), /class="session-tree-row session-tree-session"/);
+  // No set at all: nothing animates, which is every other render of the tree.
+  assert.doesNotMatch(render({ rows }), /is-entering/);
+});
+
 test("the pinned header toggles the section and shows activity dots only while collapsed", () => {
   const collapsed = rowMarkup(render({
     rows: [{ kind: "pinned-header", key: "pinned-header", count: 3, collapsed: true, running: 1, awaiting: 0, unread: 2 }],
