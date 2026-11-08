@@ -755,6 +755,7 @@ export const zhCNLocale: LocalePlugin = {
     "chat.extensionExpand": "展开",
     "chat.extensionMaximize": "放大",
     "chat.extensionRestoreSize": "还原尺寸",
+    "chat.extensionMove": "拖动可移动窗口",
     "chat.extensionMoreWaiting": "还有 {count} 个",
     "chat.cancel": "取消",
     "chat.confirm": "确认",
