@@ -20,7 +20,16 @@ import { AgentSessionPanel } from "./AgentSessionPanel";
 import { DebugPanel, DebugPanelBoundary } from "./DebugPanel";
 import { SessionChatPanel } from "./SessionChatPanel";
 import { TerminalPanel } from "./TerminalPanel";
-import { newTerminalTab, restoreTerminalTabs, TERMINAL_TABS_KEY, type TerminalTab } from "./terminal-tab-state";
+import { TerminalDock } from "./TerminalDock";
+import {
+  newTerminalTab,
+  restoreTerminalDock,
+  restoreTerminalTabs,
+  serializeTerminalDock,
+  TERMINAL_DOCK_KEY,
+  TERMINAL_TABS_KEY,
+  type TerminalTab,
+} from "./terminal-tab-state";
 import { appendSideTab, restoreSideTabs, sideTabsKey } from "./side-tab-state";
 import { useTheme } from "@/hooks/useTheme";
 import { useFontPreferences } from "@/hooks/useFontPreferences";
@@ -570,6 +579,12 @@ export function AppShell() {
   const fileWorkspaceGenerationRef = useRef(0);
   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
   const [terminalsRestored, setTerminalsRestored] = useState(false);
+  // The Ctrl+` bottom terminal: one shell of its own, hidden rather than closed.
+  const [terminalDockTab, setTerminalDockTab] = useState<TerminalTab | null>(null);
+  const [terminalDockOpen, setTerminalDockOpen] = useState(false);
+  const [terminalDockRestored, setTerminalDockRestored] = useState(false);
+  // The chat column the dock sits in: 35% of it is the dock's default height.
+  const chatAreaRef = useRef<HTMLDivElement>(null);
   // Subagent tabs remain open within a project; side tabs follow their main session.
   const [agentTabs, setAgentTabs] = useState<{ sessionId: string; label: string; side?: boolean }[]>([]);
   const sideTabOwnerRef = useRef<string | null>(null);
@@ -627,6 +642,24 @@ export function AppShell() {
       }));
     } catch { /* storage is optional */ }
   }, [terminalTabs, activeFileTabId, rightPanelOpen, terminalsRestored]);
+
+  // The dock reattaches to its own PTY on reload (`createTerminal()` returns the
+  // record for a known id), the way the right panel's tabs do.
+  useEffect(() => {
+    try {
+      const saved = restoreTerminalDock(window.sessionStorage.getItem(TERMINAL_DOCK_KEY));
+      setTerminalDockTab(saved.tab);
+      setTerminalDockOpen(saved.open);
+    } catch { /* storage is optional */ }
+    setTerminalDockRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!terminalDockRestored) return;
+    try {
+      window.sessionStorage.setItem(TERMINAL_DOCK_KEY, serializeTerminalDock(terminalDockTab, terminalDockOpen));
+    } catch { /* storage is optional */ }
+  }, [terminalDockTab, terminalDockOpen, terminalDockRestored]);
 
   const rememberSideTabs = useCallback((key: string) => {
     try {
@@ -1047,12 +1080,6 @@ export function AppShell() {
     }
   }, [activeCwd, changeFileWorkspace, invalidateWorkspaceRestore, isMobile, newSessionCwd, router, selectedSession]);
 
-  // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N etc.)
-  useGlobalKeyboardShortcuts({
-    onNewSession: (cwd: string) => handleNewSession(`kb-${Date.now()}`, cwd),
-    activeCwd,
-  });
-
   // Client-built transient SessionInfo (new session / fork) lacks the
   // server-computed projectKey, which the same-project check in
   // handleCwdChange relies on. Hydrate it from the session list so switching
@@ -1071,6 +1098,69 @@ export function AppShell() {
       })
       .catch(() => {});
   }, []);
+
+  // ---- The Ctrl+` bottom terminal ----
+  // Its shell starts where the page is: the open session's cwd, or the project a
+  // fresh composer would use. It then stays there until it is closed — a shell
+  // in a previous project is what a terminal does, and one click starts a new one.
+  //
+  // This whole block sits below `hydrateSelectedSession`, after every range
+  // `callbackBody()` in `components/AppShell.workspace-memory.test.mjs` slices:
+  // those slices are evaluated with types stripped, and neither this JSX nor
+  // these setters exist in that scope.
+  const terminalDockCwd = selectedSession?.cwd ?? newSessionCwd ?? activeCwd;
+
+  const handleToggleTerminalDock = useCallback(() => {
+    if (terminalDockOpen) {
+      setTerminalDockOpen(false);
+      return;
+    }
+    const cwd = terminalDockCwd;
+    // No project and no shell yet: nothing to run a terminal in.
+    if (!terminalDockTab) {
+      if (!cwd) return;
+      setTerminalDockTab(newTerminalTab(cwd));
+    }
+    setTerminalDockOpen(true);
+  }, [terminalDockCwd, terminalDockOpen, terminalDockTab]);
+
+  const handleTerminalDockClosed = useCallback((closed: TerminalTab) => {
+    if (closed.closing === "restart") {
+      setTerminalDockTab(newTerminalTab(closed.cwd));
+      return;
+    }
+    setTerminalDockTab(null);
+    setTerminalDockOpen(false);
+  }, []);
+
+  // The reader ended the shell with `exit`: the dock closes itself, and dropping the tab means the
+  // next Ctrl+` starts a fresh shell instead of reattaching to the one that just ended. Any other
+  // ending (a crash, a kill, a dropped connection) keeps the pane and its exit notice.
+  const handleTerminalDockExited = useCallback(() => {
+    setTerminalDockTab(null);
+    setTerminalDockOpen(false);
+  }, []);
+
+  // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N, Ctrl+` etc.)
+  useGlobalKeyboardShortcuts({
+    onNewSession: (cwd: string) => handleNewSession(`kb-${Date.now()}`, cwd),
+    onToggleTerminal: handleToggleTerminalDock,
+    activeCwd,
+  });
+
+  const terminalDock = terminalDockTab ? (
+    <TerminalDock
+      tab={terminalDockTab}
+      open={terminalDockOpen}
+      getAvailableHeight={() => chatAreaRef.current?.clientHeight ?? window.innerHeight}
+      onHide={() => setTerminalDockOpen(false)}
+      onRestart={() => setTerminalDockTab((tab) => (tab && !tab.closing ? { ...tab, closing: "restart" } : tab))}
+      onTerminate={() => setTerminalDockTab((tab) => (tab && !tab.closing ? { ...tab, closing: "close" } : tab))}
+      onClosed={() => handleTerminalDockClosed(terminalDockTab)}
+      onCloseError={() => setTerminalDockTab((tab) => (tab ? { ...tab, closing: undefined } : tab))}
+      onExit={handleTerminalDockExited}
+    />
+  ) : null;
 
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback((session: SessionInfo, sourceDraftKey: string) => {
@@ -2811,7 +2901,7 @@ export function AppShell() {
         </div>
 
         {/* Chat content */}
-        <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+        <div ref={chatAreaRef} style={{ flex: 1, overflow: "hidden", position: "relative" }}>
           {showChat ? (
             <ChatWindow
               key={sessionKey}
@@ -2824,6 +2914,7 @@ export function AppShell() {
               newSessionCwd={effectiveNewSessionCwd}
               newSessionDraftKey={newSessionDraftKey}
               newSessionContextBar={newSessionContextBar}
+              terminalDock={terminalDock}
               initialNewSessionChoices={selectedSession === null ? carriedNewSessionChoices : null}
               onNewSessionChoicesChange={handleNewSessionChoicesChange}
               onAgentEnd={handleAgentEnd}

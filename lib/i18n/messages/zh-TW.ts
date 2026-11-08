@@ -830,6 +830,8 @@ export const zhTWLocale: LocalePlugin = {
     "terminal.close": "終止終端機",
     "terminal.restart": "重新啟動終端機",
     "terminal.reconnect": "重新連線終端機",
+    "terminal.hideDock": "收合終端機面板",
+    "terminal.dockResize": "調整終端機面板高度",
     "terminal.lightTheme": "終端機切換為淺色主題",
     "terminal.darkTheme": "終端機切換為深色主題",
     "terminal.extraKeys": "終端機按鍵",

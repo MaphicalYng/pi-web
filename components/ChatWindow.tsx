@@ -61,6 +61,8 @@ interface Props {
   newSessionDraftKey: string | null;
   /** Shown above the composer while a fresh composer is still empty: where its session starts. */
   newSessionContextBar?: ReactNode;
+  /** The `Ctrl+`` bottom terminal: under the composer, above the extension shelf. */
+  terminalDock?: ReactNode;
   /** A fresh composer's model and reasoning picks, carried from the composer it replaces. */
   initialNewSessionChoices?: NewSessionChoices | null;
   onNewSessionChoicesChange?: (choices: NewSessionChoices) => void;
@@ -257,7 +259,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, durationMs, cacheMis
   );
 }
 
-export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, newSessionContextBar, initialNewSessionChoices, onNewSessionChoicesChange, onAgentEnd, onToolEnd, onAttentionNeeded, onSessionCreated, onSessionForked, panel = false, onSideSession, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onDebugSnapshotReaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onOpenSettings, onContextUsageChange, onOpenFile, onFilesUploaded, onOpenSubagent, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio, holdAudio }: Props) {
+export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, newSessionContextBar, terminalDock, initialNewSessionChoices, onNewSessionChoicesChange, onAgentEnd, onToolEnd, onAttentionNeeded, onSessionCreated, onSessionForked, panel = false, onSideSession, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onDebugSnapshotReaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onOpenSettings, onContextUsageChange, onOpenFile, onFilesUploaded, onOpenSubagent, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio, holdAudio }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const completionNotificationsEnabled = !isHiddenRelation(session?.relation);
@@ -1524,26 +1526,31 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
           </div>
         )}
         {chatInputElement}
-        {/* The dock: the live overlays above the composer, then the extension status
-            shelf. One wrapper keeps its stacking context together (.chat-extension-dock
-            in app/globals.css). */}
-        <div className="chat-extension-dock">
-          <ChatExtensionOverlays
-            backgroundTaskText={chatOverlays.backgroundTaskText}
-            todos={chatOverlays.todos}
-            sessionId={session?.id}
-            scrollRootRef={scrollContainerRef}
-            messageColumnRef={messageContentRef}
-          />
-          <ExtensionStatusBar
-            statuses={chatOverlays.remainingStatuses}
-            widgets={chatOverlays.remainingWidgets}
-            onCommand={handleSend}
-            commandsDisabled={sessionBusy}
-          />
-        </div>
       </div>
+      {/* A fresh composer's column stops here: the slack below it is what keeps the
+          hero and the composer mid-screen, and the bottom terminal and the shelf
+          hug the area's bottom instead of following it down. */}
       {isEmptyNew && <div className="min-h-0 flex-1" />}
+      {/* The dock: the bottom terminal (Ctrl+`), the live overlays above it and the
+          extension status shelf. One wrapper keeps its stacking context together
+          (.chat-extension-dock in app/globals.css), and the overlays' anchor counts
+          the terminal in, so a panel covers messages instead of the shell. */}
+      <div className="chat-extension-dock">
+        {terminalDock}
+        <ChatExtensionOverlays
+          backgroundTaskText={chatOverlays.backgroundTaskText}
+          todos={chatOverlays.todos}
+          sessionId={session?.id}
+          scrollRootRef={scrollContainerRef}
+          messageColumnRef={messageContentRef}
+        />
+        <ExtensionStatusBar
+          statuses={chatOverlays.remainingStatuses}
+          widgets={chatOverlays.remainingWidgets}
+          onCommand={handleSend}
+          commandsDisabled={sessionBusy}
+        />
+      </div>
     </div>
   );
 }
