@@ -4,17 +4,18 @@
  * them without Electron; `install*` helpers only wire those decisions in.
  */
 import type { LogFn } from "./backend-supervisor";
-import { classifyLink, isAllowedBackendUrl, isLoopbackHttpUrl } from "../shared/urls";
+import { classifyLink, isAllowedBackendUrl } from "../shared/urls";
 
 export type LinkAction = "navigate" | "external" | "deny";
 
 export function linkAction(candidate: unknown, origin: string | null): LinkAction {
   const target = classifyLink(candidate, origin);
   if (target === "same-origin") return "navigate";
-  // A loopback URL that does not match the known backend origin (including the
-  // brief window before `origin` is set) must never be handed to the system
-  // browser: it is another local service, not an external link.
-  if (target === "external" && !isLoopbackHttpUrl(candidate)) return "external";
+  // Another loopback port is not "one of ours", but it is still a real http(s)
+  // URL the user asked for: an agent link to a local page (a preview server,
+  // another Pi Web instance) opens in the default browser exactly like any
+  // other external link. The window itself never leaves the backend origin.
+  if (target === "external") return "external";
   return "deny";
 }
 
@@ -36,6 +37,7 @@ export interface WebContentsEventsLike {
 /**
  * - same-origin navigations stay in the window they started in,
  * - credential-free http(s) links open in the system browser exactly once,
+ *   including loopback URLs on another port,
  * - everything else (custom schemes, file:, data:, javascript:, userinfo URLs)
  *   is dropped with a scheme-only log line,
  * - `window.open` always returns deny; same-origin targets go through
