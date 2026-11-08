@@ -61,6 +61,32 @@ export function isNewSessionShortcut(event: {
   return event.key === "Dead" && event.code === "KeyN";
 }
 
+/**
+ * Whether a keydown is the `Ctrl+`` bottom terminal shortcut.
+ *
+ * The physical key decides (`event.code`): with Ctrl held, what a layout types
+ * on the key left of `1` is its own (a German keyboard's `` ` `` is `´`, a
+ * Czech one's `'`), while the key is in the same place everywhere. An event
+ * built by hand, or one from a browser without `code`, matches on the
+ * character instead.
+ *
+ * Cmd+` is macOS's window switcher and AltGr arrives as Ctrl+Alt on Windows, so
+ * both are left alone; so is Shift, whose Ctrl+Shift+` is a character of its
+ * own and no shortcut here.
+ */
+export function isTerminalDockShortcut(event: {
+  key: string;
+  code?: string | null;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+}): boolean {
+  if (!event.ctrlKey || event.altKey || event.metaKey) return false;
+  if (event.code) return event.code === "Backquote" && !event.shiftKey;
+  return event.key === "`";
+}
+
 // ---------------------------------------------------------------------------
 // Hook: global keyboard shortcuts
 // ---------------------------------------------------------------------------
@@ -68,6 +94,8 @@ export function isNewSessionShortcut(event: {
 interface UseGlobalKeyboardShortcutsOptions {
   /** Called when Ctrl+Alt+N is pressed. Receives current cwd. */
   onNewSession?: (cwd: string) => void;
+  /** Called when Ctrl+` is pressed: show the bottom terminal, or hide it again. */
+  onToggleTerminal?: () => void;
   /** The currently selected project directory (sidebar cwd). */
   activeCwd?: string | null;
 }
@@ -79,6 +107,8 @@ interface UseGlobalKeyboardShortcutsOptions {
  *   Esc          – stop the running agent (via module-level abort handler)
  *   Ctrl+Alt+N   – create a new session in the active project directory
  *                  (see `isNewSessionShortcut()` for macOS and AltGr)
+ *   Ctrl+`       – show the bottom terminal dock, or hide it again
+ *                  (see `isTerminalDockShortcut()` for layouts, Cmd and Shift)
  *
  * Note: Esc inside <textarea> or <input> is deliberately NOT handled here.
  * ChatInput manages its own Esc logic (closing slash / @ file menus, stopping
@@ -89,13 +119,23 @@ interface UseGlobalKeyboardShortcutsOptions {
 export function useGlobalKeyboardShortcuts(
   options: UseGlobalKeyboardShortcutsOptions,
 ): void {
-  const { onNewSession, activeCwd } = options;
+  const { onNewSession, onToggleTerminal, activeCwd } = options;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
       // ---- Esc: stop agent ----
       if (e.key === "Escape") {
         handleGlobalEscape(e);
+        return;
+      }
+
+      // ---- Ctrl+`: the bottom terminal ----
+      // Handled from anywhere, a focused terminal included: the shell keeps its
+      // own Ctrl+` line editing, so the panel's toggle must win here.
+      if (isTerminalDockShortcut(e)) {
+        if (!onToggleTerminal) return;
+        e.preventDefault();
+        onToggleTerminal();
         return;
       }
 
@@ -109,5 +149,5 @@ export function useGlobalKeyboardShortcuts(
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeCwd, onNewSession]);
+  }, [activeCwd, onNewSession, onToggleTerminal]);
 }

@@ -88,6 +88,45 @@ export async function checkExtensionDialogs(page, artifacts, width) {
       assert.equal(commands.slice(before).some(command => command.type === "abort"), false, "Dialog Esc must not abort the agent");
     }
 
+    // The title bar is a drag handle: the dialog follows the pointer, stays inside the
+    // chat region, comes back on a double click, and its buttons still answer afterwards.
+    const movable = await start("confirm");
+    const bar = movable.locator(":scope > div").first();
+    const box = await movable.boundingBox();
+    const barBox = await bar.boundingBox();
+    const room = await movable.evaluate(element => {
+      const overlay = element.parentElement.getBoundingClientRect();
+      const rect = element.getBoundingClientRect();
+      return {
+        x: Math.floor(overlay.right - 20 - rect.right),
+        y: Math.floor(overlay.bottom - 20 - rect.bottom),
+      };
+    });
+    const grab = { x: barBox.x + 30, y: barBox.y + barBox.height / 2 };
+    if (room.x >= 8 || room.y >= 8) {
+      const dx = Math.min(80, Math.max(0, room.x));
+      const dy = Math.min(30, Math.max(0, room.y));
+      await page.mouse.move(grab.x, grab.y);
+      await page.mouse.down();
+      await page.mouse.move(grab.x + dx, grab.y + dy, { steps: 8 });
+      await page.mouse.up();
+      const moved = await movable.boundingBox();
+      assert.ok(Math.abs(moved.x - box.x - dx) <= 2 && Math.abs(moved.y - box.y - dy) <= 2,
+        `The title bar drags the dialog by (${dx}, ${dy}), got (${Math.round(moved.x - box.x)}, ${Math.round(moved.y - box.y)})`);
+      await page.screenshot({ path: join(artifacts, `extension-dialog-drag-${width}.png`) });
+      await page.mouse.dblclick(grab.x + dx, grab.y + dy);
+      await page.waitForFunction(({ x, y }) => {
+        const rect = document.querySelector('[role="dialog"]')?.getBoundingClientRect();
+        return rect !== undefined && Math.abs(rect.x - x) <= 1 && Math.abs(rect.y - y) <= 1;
+      }, { x: box.x, y: box.y }, { timeout: 2000 });
+    }
+    const beforeCancel = commands.length;
+    await movable.getByRole("button", { name: "Cancel", exact: true }).click();
+    await movable.waitFor({ state: "hidden" });
+    assert.equal(commands.slice(beforeCancel).filter(command => command.type === "extension_ui_response").length, 1,
+      "A moved dialog still answers");
+    await page.getByRole("button", { name: "Stop agent", exact: true }).waitFor({ state: "hidden" });
+
     const timed = await start("timeout");
     const countdown = timed.getByText(/expires in \ds/);
     await countdown.waitFor();

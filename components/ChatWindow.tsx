@@ -4,12 +4,13 @@ import { SESSION_SWAP_MS } from "@/hooks/useSessionSwap";
 import { BUILD_VERSION, BUILD_VERSION_TAG } from "@/lib/build-version";
 import { isHiddenRelation, SIDE_BOUNDARY_MESSAGE_TYPE } from "@/lib/session-family";
 import Image from "next/image";
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { AgentMessage, AssistantContentBlock, AssistantMessage, BashExecutionMessage, BlockingExtensionUiRequest, ExtensionUiRequest, SessionInfo, SessionTreeNode, ToolResultMessage } from "@/lib/types";
 import { normalizeCustomPanelLines, stripAnsi } from "@/lib/ansi";
 import { splitNoticeText } from "@/lib/notice-text";
 import { EXTENSION_DIALOG_BASE_WIDTH, fitExtensionDialogWidth } from "@/lib/extension-dialog-fit";
+import { clampDialogOffset, DIALOG_DRAG_START_PX, NO_DIALOG_OFFSET, type DialogOffset } from "@/lib/extension-dialog-drag";
 import { asBracketedPaste, toTerminalKeyData } from "@/lib/terminal-input";
 import { collapsesProcessDetails, countToolCallBlocks, getDisplayableAssistantBlocks, hasAssistantAnswer, isHiddenCustomMessage, isMessageGroupAnchor, splitFinalAssistantBlocks } from "@/lib/message-display";
 import { extractTurnWrittenFiles, type WrittenFile } from "@/lib/turn-written-files";
@@ -62,6 +63,8 @@ interface Props {
   newSessionDraftKey: string | null;
   /** Shown above the composer while a fresh composer is still empty: where its session starts. */
   newSessionContextBar?: ReactNode;
+  /** The `Ctrl+`` bottom terminal: under the composer, above the extension shelf. */
+  terminalDock?: ReactNode;
   /** A fresh composer's model and reasoning picks, carried from the composer it replaces. */
   initialNewSessionChoices?: NewSessionChoices | null;
   onNewSessionChoicesChange?: (choices: NewSessionChoices) => void;
@@ -270,7 +273,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, durationMs, cacheMis
   );
 }
 
-export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, newSessionContextBar, initialNewSessionChoices, onNewSessionChoicesChange, onAgentEnd, onToolEnd, onAttentionNeeded, onSessionCreated, onSessionForked, panel = false, onSideSession, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onDebugSnapshotReaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onOpenSettings, onContextUsageChange, onOpenFile, onFilesUploaded, onOpenSubagent, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio, holdAudio, swapping = false, onSwapSettled }: Props) {
+export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, newSessionContextBar, terminalDock, initialNewSessionChoices, onNewSessionChoicesChange, onAgentEnd, onToolEnd, onAttentionNeeded, onSessionCreated, onSessionForked, panel = false, onSideSession, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onDebugSnapshotReaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onOpenSettings, onContextUsageChange, onOpenFile, onFilesUploaded, onOpenSubagent, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio, holdAudio, swapping = false, onSwapSettled }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const completionNotificationsEnabled = !isHiddenRelation(session?.relation);
@@ -1601,29 +1604,34 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
           </div>
         )}
         {chatInputElement}
-        {/* The dock: the live overlays above the composer, then the extension status
-            shelf. One wrapper keeps its stacking context together (.chat-extension-dock
-            in app/globals.css). */}
-        <div className="chat-extension-dock">
-          <ChatExtensionOverlays
-            backgroundTaskText={chatOverlays.backgroundTaskText}
-            todos={chatOverlays.todos}
-            sessionId={session?.id}
-            scrollRootRef={scrollContainerRef}
-            messageColumnRef={messageContentRef}
-          />
-          <ExtensionStatusBar
-            statuses={chatOverlays.remainingStatuses}
-            widgets={chatOverlays.remainingWidgets}
-            // One version on screen: this footer carries it except under a
-            // fresh composer, whose brand line shows the same build.
-            buildVersion={isEmptyNew ? null : t("footer.buildVersion", { version: BUILD_VERSION })}
-            onCommand={handleSend}
-            commandsDisabled={sessionBusy}
-          />
-        </div>
       </div>
+      {/* A fresh composer's column stops here: the slack below it is what keeps the
+          hero and the composer mid-screen, and the bottom terminal and the shelf
+          hug the area's bottom instead of following it down. */}
       {isEmptyNew && <div className="min-h-0 flex-1" />}
+      {/* The dock: the bottom terminal (Ctrl+`), the live overlays above it and the
+          extension status shelf. One wrapper keeps its stacking context together
+          (.chat-extension-dock in app/globals.css), and the overlays' anchor counts
+          the terminal in, so a panel covers messages instead of the shell. */}
+      <div className="chat-extension-dock">
+        {terminalDock}
+        <ChatExtensionOverlays
+          backgroundTaskText={chatOverlays.backgroundTaskText}
+          todos={chatOverlays.todos}
+          sessionId={session?.id}
+          scrollRootRef={scrollContainerRef}
+          messageColumnRef={messageContentRef}
+        />
+        <ExtensionStatusBar
+          statuses={chatOverlays.remainingStatuses}
+          widgets={chatOverlays.remainingWidgets}
+          // One version on screen: this footer carries it except under a fresh
+          // composer, whose brand line shows the same build.
+          buildVersion={isEmptyNew ? null : t("footer.buildVersion", { version: BUILD_VERSION })}
+          onCommand={handleSend}
+          commandsDisabled={sessionBusy}
+        />
+      </div>
     </div>
   );
 }
@@ -1786,6 +1794,9 @@ function NoticeShelf({ notices, floating = false, onPauseChange }: { notices: No
   );
 }
 
+/** Breathing room the dialog overlay keeps around the dialog, and the edge its drag stops at. */
+const EXTENSION_DIALOG_OVERLAY_PADDING = 20;
+
 type ExtensionDialogRequest = Extract<ExtensionUiRequest, { method: "select" | "confirm" | "input" | "editor" }>;
 
 function getExtensionDialogSummary(request: ExtensionDialogRequest): string | undefined {
@@ -1839,13 +1850,85 @@ function ExtensionDialog({
   const bodyRef = useRef<HTMLDivElement>(null);
   const [fitWidth, setFitWidth] = useState<number | null>(null);
   const [full, setFull] = useState(false);
-  const toggleFull = useCallback(() => setFull((prev) => !prev), []);
+  // The title bar is a drag handle: an ask dialog covers the reply the user is reading
+  // behind it, and moving it is how they read around it.
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState<DialogOffset>(NO_DIALOG_OFFSET);
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin: DialogOffset; moved: boolean } | null>(null);
+  const toggleFull = useCallback(() => {
+    setFull((prev) => !prev);
+    // A maximized dialog has nowhere to move, and restoring must not leave it shifted.
+    setOffset(NO_DIALOG_OFFSET);
+  }, []);
   const [now, setNow] = useState(() => Date.now());
   const focusFirstOption = useCallback((element: HTMLDivElement | null) => element?.focus(), []);
   const summary = getExtensionDialogSummary(request);
   const remainingSeconds = request.expiresAt === undefined
     ? null
     : Math.max(0, Math.ceil((request.expiresAt - now) / 1000));
+
+  /** Put the dialog at `proposed` (read against the offset it is rendered with), kept inside the chat region. */
+  const moveDialog = useCallback((proposed: (prev: DialogOffset) => DialogOffset) => {
+    const dialog = dialogRef.current;
+    const overlay = overlayRef.current;
+    if (!dialog || !overlay) return;
+    const bounds = overlay.getBoundingClientRect();
+    const region = {
+      left: bounds.left + EXTENSION_DIALOG_OVERLAY_PADDING,
+      top: bounds.top + EXTENSION_DIALOG_OVERLAY_PADDING,
+      right: bounds.right - EXTENSION_DIALOG_OVERLAY_PADDING,
+      bottom: bounds.bottom - EXTENSION_DIALOG_OVERLAY_PADDING,
+    };
+    const dialogRect = dialog.getBoundingClientRect();
+    setOffset((prev) => {
+      const next = clampDialogOffset(proposed(prev), prev, dialogRect, region);
+      return next.x === prev.x && next.y === prev.y ? prev : next;
+    });
+  }, []);
+
+  // The chat region changes with the window and with the sidebar's width, and the dialog
+  // itself grows when its content asks for room: a moved dialog follows back into view.
+  useLayoutEffect(() => {
+    if (collapsed) return;
+    moveDialog((prev) => prev);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => moveDialog((prev) => prev));
+    if (overlayRef.current) observer.observe(overlayRef.current);
+    if (dialogRef.current) observer.observe(dialogRef.current);
+    return () => observer.disconnect();
+  }, [collapsed, fitWidth, full, moveDialog]);
+
+  const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    // The bar's buttons keep their own clicks, a maximized dialog has nowhere to go, and a
+    // touch gesture over the bar still scrolls it (the bar scrolls when a title is long).
+    if (full || event.button !== 0 || event.pointerType === "touch") return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin: offset, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const dragDialog = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved) {
+      if (Math.abs(dx) < DIALOG_DRAG_START_PX && Math.abs(dy) < DIALOG_DRAG_START_PX) return;
+      drag.moved = true;
+      setDragging(true);
+    }
+    // From the first moved pixel: a drag must not select the title instead.
+    event.preventDefault();
+    moveDialog(() => ({ x: drag.origin.x + dx, y: drag.origin.y + dy }));
+  };
+
+  const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDragging(false);
+  };
 
   useLayoutEffect(() => {
     if (collapsed) return;
@@ -1902,6 +1985,7 @@ function ExtensionDialog({
 
   return (
     <div
+      ref={overlayRef}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
         event.preventDefault();
@@ -1915,7 +1999,7 @@ function ExtensionDialog({
         display: "flex",
         alignItems: collapsed ? "flex-start" : "center",
         justifyContent: "center",
-        padding: 20,
+        padding: EXTENSION_DIALOG_OVERLAY_PADDING,
         pointerEvents: "none",
       }}
     >
@@ -1974,11 +2058,29 @@ function ExtensionDialog({
           border: "1px solid var(--border)",
           borderRadius: 8,
           background: "var(--bg)",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.28)",
+          boxShadow: dragging ? "0 28px 70px rgba(0,0,0,0.34)" : "0 20px 60px rgba(0,0,0,0.28)",
           overflow: "hidden",
+          // Where the title bar's drag put it; a reset (double click, maximize) slides back.
+          transform: `translate(${offset.x}px, ${offset.y}px)`,
+          transition: dragging ? "none" : "transform 0.16s ease",
+          userSelect: dragging ? "none" : undefined,
         }}
       >
-        <div style={{ flexShrink: 1, minHeight: 0, display: "flex", alignItems: "flex-start", gap: 8, padding: "12px 14px", borderBottom: "1px solid var(--border)", maxHeight: "50vh", overflowY: "auto" }}>
+        <div
+          onPointerDown={startDrag}
+          onPointerMove={dragDialog}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onDoubleClick={() => setOffset(NO_DIALOG_OFFSET)}
+          title={full ? undefined : t("chat.extensionMove")}
+          style={{
+            flexShrink: 1, minHeight: 0, display: "flex", alignItems: "flex-start", gap: 8, padding: "12px 14px", borderBottom: "1px solid var(--border)", maxHeight: "50vh", overflowY: "auto",
+            // The bar is the drag handle: grabbing it reads as one, and dragging it must
+            // not select the title.
+            cursor: full ? "default" : dragging ? "grabbing" : "grab",
+            userSelect: dragging ? "none" : undefined,
+          }}
+        >
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Pi's TUI shows the title verbatim, newlines included; select/input have no
                 separate message field, so extensions put multi-line text here. */}

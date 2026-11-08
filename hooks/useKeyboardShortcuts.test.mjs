@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { handleGlobalEscape, isNewSessionShortcut, registerAbortHandler } from "./useKeyboardShortcuts.ts";
+import {
+  handleGlobalEscape,
+  isNewSessionShortcut,
+  isTerminalDockShortcut,
+  registerAbortHandler,
+} from "./useKeyboardShortcuts.ts";
 
 function keydown(key, { tagName = "BUTTON", defaultPrevented = false } = {}) {
   return {
@@ -90,4 +95,50 @@ test("a KeyboardEvent without a code still matches by key", () => {
   assert.equal(isNewSessionShortcut({ key: "Dead", code: null, ctrlKey: true, altKey: true }), false);
   assert.equal(shortcut({ key: "n", code: "" }), true);
   assert.equal(shortcut({ key: "Dead", code: "" }), false);
+});
+
+function dockKey({
+  key = "`",
+  code = "Backquote",
+  ctrlKey = true,
+  altKey = false,
+  metaKey = false,
+  shiftKey = false,
+} = {}) {
+  return isTerminalDockShortcut({ key, code, ctrlKey, altKey, metaKey, shiftKey });
+}
+
+test("Ctrl+` opens the bottom terminal", () => {
+  assert.equal(dockKey(), true);
+});
+
+test("the physical key decides, so a layout that types something else still matches", () => {
+  // German and Nordic layouts type `´` on that key, Czech `'`.
+  assert.equal(dockKey({ key: "´" }), true);
+  assert.equal(dockKey({ key: "'" }), true);
+});
+
+test("Ctrl+Shift+` is a character to type, not this shortcut", () => {
+  assert.equal(dockKey({ key: "~", shiftKey: true }), false);
+});
+
+test("Cmd+` stays macOS's window switcher, and the shortcut needs Ctrl", () => {
+  assert.equal(dockKey({ ctrlKey: false, metaKey: true }), false);
+  assert.equal(dockKey({ ctrlKey: false }), false);
+});
+
+test("Alt stays the user's text, AltGr (Ctrl+Alt on Windows) included", () => {
+  assert.equal(dockKey({ altKey: true }), false);
+});
+
+test("another key with Ctrl is not the shortcut", () => {
+  assert.equal(dockKey({ code: "KeyN", key: "n" }), false);
+  assert.equal(dockKey({ code: "Digit1", key: "1" }), false);
+});
+
+test("an event without a code matches on the character", () => {
+  assert.equal(dockKey({ code: null }), true);
+  assert.equal(dockKey({ code: "" }), true);
+  assert.equal(dockKey({ code: null, key: "~" }), false);
+  assert.equal(dockKey({ code: null, key: "n" }), false);
 });

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>Pi Web Desktop — Modular Windows</title>
+  <rect width="1024" height="1024" rx="228" fill="#F5F2E9"/>
+  <g fill="#0D2247">
+    <rect x="205" y="206" width="610" height="186" rx="36"/>
+    <rect x="261" y="399" width="182" height="406" rx="32"/>
+    <rect x="578" y="399" width="182" height="406" rx="32"/>
+  </g>
+  <g fill="#F5F2E9">
+    <circle cx="267" cy="263" r="18"/>
+    <circle cx="327" cy="263" r="18"/>
+  </g>
+  <rect x="368" y="245" width="36" height="36" fill="#FF7058"/>
+</svg>
