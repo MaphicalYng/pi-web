@@ -90,12 +90,12 @@ Pi Web can invoke tools, run shell commands, edit project files, and access the 
 
 The mounted workspace is writable by the agent. Only mount directories you intend Pi Web to access. Keep the writable agent directory and provider credentials private.
 
-## Released images
+## Building an image
 
-Pushing a `v*` release tag makes the Release workflow (`.github/workflows/publish.yml`) publish `linux/amd64` and `linux/arm64` images to GHCR, next to the npm package: `ghcr.io/agegr/pi-web:<version>`, `:<major>.<minor>` and `:latest`. It uses the built-in `GITHUB_TOKEN`, so no registry secret is needed.
+This fork publishes no images, so there is nothing to pull: build one from the `Dockerfile` in this repository.
 
-To run a released image instead of building one, replace the `build:` section in `compose.yaml` with:
-
-```yaml
-    image: ghcr.io/agegr/pi-web:latest
+```bash
+docker build -t pi-web .
 ```
+
+Keep the `build:` section in `compose.yaml`. To publish the image somewhere of your own, tag and push it yourself with `docker tag` and `docker push`.

@@ -1,26 +1,26 @@
 # Release Checklist
 
-This repo publishes three artifacts for each release:
+This fork (`MaphicalYng/pi-web`) keeps upstream's version number and appends its own:
 
-- npm package: `@agegr/pi-web`, published by GitHub Actions (`.github/workflows/publish.yml`) when a `v*` tag is pushed
-- Docker image: `ghcr.io/agegr/pi-web`, tagged `<version>`, `<major>.<minor>` and `latest`, published by the same workflow on the same tag (see [docker.md](./docker.md))
-- GitHub Release: `agegr/pi-web`
+```
+v<upstream version>-imp-<fork version>        e.g. v0.15.0-imp-0.1.0
+package.json "version": "0.15.0-imp-0.1.0"    the tag without its "v"
+```
 
-Use this checklist from a clean `main` checkout.
+A release here ships exactly one artifact: the macOS desktop DMG, attached to the GitHub Release. **No `v*` tag triggers any workflow.** `ci.yml` runs on `main` and pull requests, `demo-pages.yml` deploys the demo from `main` only, and this fork carries no publish workflow — nothing reaches npm or GHCR (upstream's `@agegr/pi-web` and `ghcr.io/agegr/pi-web` are not ours to publish).
 
-## 0. One-time Setup: npm Trusted Publishing
+## 0. Choosing the version
 
-The publish workflow authenticates to npm with Trusted Publishing (OIDC). No npm token exists anywhere, so nothing expires or needs rotating.
+| Change | Bump |
+| --- | --- |
+| Fork-only work (UI, desktop shell, fixes) | the `-imp-<n>` part: `0.15.0-imp-0.1.0` → `0.15.0-imp-0.2.0` |
+| A merged upstream release | both: take upstream's version, continue the fork counter (`0.16.0-imp-0.3.0`) |
 
-On npmjs.com, open `@agegr/pi-web` → Settings → Trusted Publisher → GitHub Actions and enter:
+`package.json` and `package-lock.json` must carry the same value, and the DMG copies it (`desktop/packaging/build-desktop.mjs` reads `package.json` and writes `desktop/packaging/app-package.json`).
 
-- Organization or user: `agegr`
-- Repository: `pi-web`
-- Workflow filename: `publish.yml`
-- Environment: leave empty
-- Permissions: `npm publish` only. The workflow publishes directly; `npm stage publish` (a staged version that waits for a maintainer's 2FA approval) is not used.
+One exception: macOS takes `CFBundleShortVersionString` and `CFBundleVersion` as 1-3 period-separated integers, so a pre-release suffix cannot go into the plist. `build-desktop.mjs` therefore passes the numeric base (`0.15.0`) to electron-builder, and the fork's own version lives in `package.json`, the baked constants the app's footer reads, and the tag. That is why step 3 checks both.
 
-Renaming the workflow file breaks publishing until this entry is updated. Settings → Publishing access is set to "Require two-factor authentication and disallow bypass 2fa tokens": Trusted Publishing is not a token and keeps working, and a manual `npm publish` still works with a 2FA prompt.
+Do not run `npm run release` (`npm version patch`): it produces a plain `0.15.1`, which drops the fork's `-imp-<n>` marker and makes the DMG disagree with the tag. Edit both files by hand.
 
 ## 1. Preflight
 
@@ -28,138 +28,80 @@ Renaming the workflow file breaks publishing until this entry is updated. Settin
 git fetch origin
 git status --short --branch
 git log --oneline --decorate -5
-git rev-list --left-right --count main...origin/main
-gh auth status
 node -e "const p=require('./package.json'); console.log(p.version)"
-gh run list --branch main --workflow ci.yml --limit 1
+git tag --points-at HEAD        # expect nothing: the tag is created in step 3
+git ls-remote --tags origin     # expect the tag to be absent
 ```
 
-Expected:
+Expected: a clean tree; `package.json` already carrying the version you are about to tag; the tag free on origin.
 
-- `git status` is clean: `npm version` refuses a dirty tree.
-- `main` and `origin/main` are aligned (`0	0`), and every commit meant for this release is on `origin/main`. A commit merged only locally has had no CI run: push `main` first and wait for CI.
-- GitHub is authenticated as an account that can push and create releases.
-- CI on the commit you are releasing passed. The publish workflow only builds; it does not lint or test.
-
-Nothing is built locally, so a running dev server on 30141 is safe, and a local `.next/server/route-cache/` cannot leak into the package: CI builds from a fresh checkout.
-
-Before bumping, confirm the next version is free (replace `<version>`):
+Nothing runs on a tag, so nothing gates the release but you. Run what CI would run:
 
 ```bash
-npm view @agegr/pi-web@<version> version --registry https://registry.npmjs.org/   # expect E404
-git ls-remote --tags origin v<version>                                            # expect empty
+npm run lint
+npx tsc --noEmit
+npm test
 ```
 
-## 2. Bump, Commit and Tag
+CI's `e2e` job needs `npx playwright install --with-deps chromium` and a `next build`; run `npm run test:e2e` locally if the change touches the UI.
 
-Patch release:
+## 2. Commit the version
 
 ```bash
-npm run release
+git commit -am "Release v<version>"
+git push origin <branch>
 ```
 
-The release script runs:
+Push the branch **before** the tag: a tag pointing at a commit no remote branch reaches is hard to inspect later.
+
+## 3. Build and smoke the DMG
+
+macOS arm64 only; the build is unsigned and not notarized.
+
+Clear stale artifacts first. The build never deletes what an earlier run left in `release/`, and every command below matches `release/*.dmg` — a leftover DMG from a previous version makes that glob match two files, and `hdiutil attach` or `gh release upload` then acts on the wrong one.
 
 ```bash
-npm version patch -m "Release v%s"
+rm -f release/*.dmg                 # your own earlier build products only
+npm run build:desktop    # dist/desktop, then release/mac-arm64/Pi Web.app and release/*.dmg
+npm run smoke:desktop    # launch the packaged app: layout, guards, shutdown
 ```
 
-It bumps `package.json` and `package-lock.json`, commits them as `Release v<version>`, and creates the annotated tag `v<version>`. Nothing leaves your machine yet.
-
-For a minor (or major) release, name the bump yourself:
+Do not go on unless `smoke:desktop` passes. Confirm exactly one DMG exists and that it is the new build:
 
 ```bash
-npm version minor -m "Release v%s"
+ls -la release/*.dmg
+hdiutil attach release/*.dmg -nobrowse   # /Volumes/Pi Web
+/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "/Volumes/Pi Web/Pi Web.app/Contents/Info.plist"
+hdiutil detach "/Volumes/Pi Web"
 ```
 
-Choosing the bump: look at `git log --oneline v<previous>..HEAD`. A batch of `feat:` commits (new UI, new commands, new settings) is a minor; only fixes and small adjustments is a patch. Decide before pushing, since a published version cannot be reused.
+The file must be named `Pi Web-<version>-arm64.dmg` with the whole `package.json` version in it (`Pi Web-0.15.0-imp-0.1.0-arm64.dmg`), and that printed string must be only the version's numeric base — the part before the first `-` — while the chat's footer line shows the whole thing (`0.15.0-imp-0.1.0-<commit>`). A DMG reporting the previous base is a stale artifact: rebuild, do not rename. A plist carrying the whole `-imp-…` suffix means the `bundleShortVersion` override in `build-desktop.mjs` was lost; fix that, do not ship it. A DMG named without the fork version means `artifactName` was dropped from `electron-builder.yml`, and it will collide with upstream's release.
 
-Check the result before pushing:
+That printed string must be the numeric base of `package.json`'s version — the part before the first `-` — and the chat's footer line must show the whole thing (`0.15.0-imp-0.1.0-<commit>`). A DMG reporting the previous base is a stale artifact: rebuild, do not rename. A plist carrying the whole `-imp-…` suffix means the `bundleShortVersion` override in `build-desktop.mjs` was lost; fix that, do not ship it.
 
-```bash
-git show --stat HEAD
-git tag --points-at HEAD
-```
+Build products stay out of the repository (`dist/`, `release/` are ignored). `git status --short` must stay clean.
 
-## 3. Push: CI Publishes to npm and GHCR
+## 4. Tag and push the tag alone
 
 ```bash
-git push origin main v<version>
-```
-
-Push the release tag by name. Do not use `git push --tags`: the local checkout holds tags fetched from contributor forks that are not on origin, and `--tags` publishes them (it leaked a stray `v0.10.5`, on a commit that is on no branch, during the v0.11.0 release). If you ever need `--tags`, compare `git tag` with `git ls-remote --tags origin` first.
-
-The tag starts the Release workflow (`publish.yml`). Its `check-tag` job fails the run at once if the tag is not `v` + the `package.json` version; after it, two jobs run side by side:
-
-- `npm` runs `npm ci`, `npm run build` and `npm publish --access public`. It takes about three minutes.
-- `container` builds `linux/amd64` and `linux/arm64` images and pushes them to GHCR. The arm64 half runs under QEMU: the v0.14.1 build took 33 minutes of its 45-minute timeout.
-
-Follow it:
-
-```bash
-gh run list --workflow publish.yml --limit 1
-gh run watch <run-id> --exit-status
-```
-
-The same push to `main` also redeploys the demo (`demo-pages.yml`), since the release commit changes `package.json`.
-
-Notes:
-
-- `gh run watch` can return a non-zero exit while the run is still going (it did on the long container build). Check `gh run view <run-id>` before treating it as a failure.
-
-- A newly published version may take a few minutes to show up. `npm view @agegr/pi-web@<version> version` can return E404 and `npm view @agegr/pi-web version` can show the previous version even though the workflow log printed `+ @agegr/pi-web@<version>`. This is registry propagation, not a failed publish: do not re-run the workflow. Poll the registry until the version appears:
-
-```bash
-curl -s https://registry.npmjs.org/@agegr%2Fpi-web/<version> | head -c 80   # JSON once it exists, "version not found" before
-npm view @agegr/pi-web dist-tags --registry https://registry.npmjs.org/
-npm view @agegr/pi-web versions --json --registry https://registry.npmjs.org/
-```
-
-- The package carries a provenance statement linking it to the workflow run; the npm page shows it.
-
-If the workflow fails before `npm publish` succeeds, the version is still free:
-
-- A passing cause (npm or GitHub outage): `gh run rerun <run-id>`.
-- A code or config fix: land it on `main`, then move the tag to the fixed commit and push it again. This is safe only while npm does not have the version (check with the `curl` above):
-
-```bash
-git tag -d v<version>
-git push origin :refs/tags/v<version>
 git tag -a v<version> -m "Release v<version>"
-git push origin main v<version>
+git push origin "refs/tags/v<version>"
 ```
 
-- An `ENEEDAUTH` or 404 on `npm publish` means the Trusted Publisher entry (step 0) does not match this repository and `publish.yml`.
+Never `git push --tags`. This checkout holds every tag fetched from upstream, and `--tags` publishes all of them — upstream once leaked a stray `v0.10.5` on a commit that is on no branch this way. Push the single ref, by name.
 
-If the `container` job fails after npm has the version, the tag can no longer move. A passing cause: `gh run rerun <run-id> --failed`, which reruns that job only; image tags are overwritten, so a partial push does no harm. A rerun builds the tagged commit again, so a fix to the Dockerfile or the workflow reaches GHCR only with the next release.
+## 5. Release notes
 
-### Pushed the tag too early
-
-If the tag went out before the release was ready (a commit still missing, say), cancel the Release run before `npm publish` runs:
+Write them from the commits, not from memory, and keep the file outside the repository:
 
 ```bash
-gh run cancel <run-id>
-curl -s https://registry.npmjs.org/@agegr%2Fpi-web/<version> | head -c 80   # still "version not found"
-```
-
-Then either move the tag once the fix is on `main`, as above, or release the next patch instead. The second leaves an unpublished `v<version>` tag on origin, as `v0.14.0` was: base the next release notes on the last version that was published, and say there that the skipped tag was never released.
-
-## 4. Generate Release Notes from Commits
-
-Use the previous release tag as the base.
-
-```bash
+NOTES=$(mktemp)
 git log --oneline --decorate v<previous>..v<version>
 git log --format='%h%x09%s%n%b' v<previous>..v<version>
 git diff --stat v<previous>..v<version>
 ```
 
-Write the release notes from those commits, not from memory. Include both Chinese and English sections. Keep commit hashes or PR numbers next to each item when useful.
-
-- Check commands, flags and setting names against `README.md` and the code before writing them down.
-- Thank outside contributors by name: `git log --format='%h %an | %s' v<previous>..v<version>` lists authors, and the previous release's notes show the style.
-- Open with the install/upgrade command (`npm install -g @agegr/pi-web@latest`), as earlier releases did.
-- Write the notes to a file outside the repo (for example `NOTES=$(mktemp)`), or pass them through stdin as shown below. A `release-notes.md` in the repo root is an untracked file in the next release's `git status`.
+Check every command, setting name and path you mention against `README.md` and the code before writing it down.
 
 Suggested structure:
 
@@ -180,9 +122,10 @@ Suggested structure:
 
 - ...
 
-### 内部调整
+### 安装
 
-- 发布 npm 包 `@agegr/pi-web@<version>`。
+- 下载附加的 DMG，把 **Pi Web** 拖入「应用程序」。未签名，首次启动需右键 → 打开，或执行
+  `xattr -dr com.apple.quarantine "/Applications/Pi Web.app"`。
 
 ## English
 
@@ -200,75 +143,58 @@ Prepared from commits in `v<previous>..v<version>`.
 
 - ...
 
-### Internal
+### Install
 
-- Published npm package `@agegr/pi-web@<version>`.
+- Download the attached DMG and drag **Pi Web** into `Applications`. It is unsigned: right-click → Open on
+  first launch, or run `xattr -dr com.apple.quarantine "/Applications/Pi Web.app"`.
 ```
 
-## 5. Create or Update the GitHub Release
-
-Create a new release:
+## 6. Create the GitHub Release with the DMG
 
 ```bash
 gh release create v<version> \
-  --repo agegr/pi-web \
+  --repo MaphicalYng/pi-web \
   --verify-tag \
   --title "v<version>" \
-  --notes-file "$NOTES"
+  --notes-file "$NOTES" \
+  release/*.dmg
 ```
 
-If the release already exists and only the notes need updating:
+`--repo` is explicit on purpose: the `origin` remote is the fork, but the upstream tags live in the same checkout, so an implicit target is one mistake away from the wrong repository.
+
+Only the notes need changing later:
 
 ```bash
-gh release edit v<version> \
-  --repo agegr/pi-web \
-  --notes-file "$NOTES"
+gh release edit v<version> --repo MaphicalYng/pi-web --notes-file "$NOTES"
 ```
 
-You can avoid a temporary file by passing notes through stdin:
+Upload the DMG afterwards, if it was missed:
 
 ```bash
-gh release edit v<version> --repo agegr/pi-web --notes-file - <<'EOF'
-## 中文
-
-...
-
-## English
-
-...
-EOF
+gh release upload v<version> --repo MaphicalYng/pi-web release/*.dmg
 ```
 
-## 6. Final Verification
+## 7. Final verification
 
 ```bash
-gh release view v<version> --repo agegr/pi-web
-gh run list --workflow publish.yml --limit 1
-npm view @agegr/pi-web@<version> version --registry https://registry.npmjs.org/
-npm view @agegr/pi-web dist-tags --registry https://registry.npmjs.org/
+gh release view v<version> --repo MaphicalYng/pi-web --json assets --jq '.assets[].name'
+git ls-remote --tags origin
 git status --short --branch
 git log --oneline --decorate -3
-git ls-remote --tags origin
-```
-
-Check that the image can be pulled without signing in:
-
-```bash
-T=$(curl -s "https://ghcr.io/token?scope=repository:agegr/pi-web:pull" | node -p 'JSON.parse(require("fs").readFileSync(0)).token')
-for tag in <version> <major>.<minor> latest; do
-  printf '%s: ' "$tag"
-  curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $T" \
-    -H 'Accept: application/vnd.oci.image.index.v1+json' \
-    "https://ghcr.io/v2/agegr/pi-web/manifests/$tag"
-done
 ```
 
 Expected:
 
-- GitHub Release exists and is not a draft unless intentionally published as one.
-- The Release run for `v<version>` succeeded, both its `npm` and `container` jobs.
-- npm exact version resolves and `latest` points at it (allow a few minutes, see step 3).
-- Every image tag answers `200`.
-- `git ls-remote --tags origin` shows no tag you did not mean to publish.
-- `main` is aligned with `origin/main`.
-- `HEAD` points at the release commit and `v<version>` tag.
+- The DMG appears in the release's assets, together with GitHub's own `Source code (zip)` and `Source code (tar.gz)`.
+- The release is not a draft.
+- `git ls-remote --tags origin` shows only tags you meant to publish.
+- The branch is aligned with its remote, and `HEAD` is the release commit the tag points at.
+
+## What this fork does not publish
+
+| Upstream publishes | Here |
+| --- | --- |
+| npm package `@agegr/pi-web`, by `publish.yml` on a `v*` tag | **Nothing.** `@agegr/pi-web` belongs to upstream; the fork's version can never match a version npm already holds, and Trusted Publishing is bound to `agegr/pi-web`. `publish.yml` is removed. |
+| Docker image `ghcr.io/agegr/pi-web` | **Nothing prebuilt.** The `Dockerfile` still builds locally (see [docker.md](./docker.md)). |
+
+A plain `git push --tags` therefore does nothing at all here — and that is the point: a tag is a marker, not a trigger.

@@ -37,6 +37,9 @@ function sequence(...values) {
 
 test("the versions read as the old brand showed them: pi-web's, a p, pi's", () => {
   assert.equal(brandVersionText("0.11.0", "1.1.0"), "0.11.0p1.1.0");
+  // A pre-release suffix never reaches the brand: it would not fit beside the
+  // two cells at the sidebar's minimum. The footer line carries the exact build.
+  assert.equal(brandVersionText("0.15.0-imp-0.1.0", "1.5.0"), "0.15.0p1.5.0");
   assert.equal(brandVersionText(undefined, undefined), "0.0.0p0.0.0");
   assert.equal(BRAND_TEXT, "Pi Web");
   assert.equal(VERSION_SHOWN_MS, 3000);

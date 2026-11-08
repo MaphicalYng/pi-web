@@ -289,12 +289,23 @@ async function installBackendLib() {
   log(`backend lib: ${names.length} modules (shims into next-standalone/lib)`);
 }
 
-function pack() {
+/**
+ * `0.15.0-imp-0.1.0` → `0.15.0`. macOS takes CFBundleShortVersionString and
+ * CFBundleVersion as 1-3 period-separated integers, so the fork's own
+ * pre-release suffix cannot go into the plist; it stays in package.json, the
+ * baked constants the app's footer reads, and the release tag.
+ */
+function numericBaseVersion(version) {
+  return String(version).split("-")[0];
+}
+
+function pack(version) {
   if (skipPack) {
     log("electron-builder skipped (--skip-pack)");
     return;
   }
-  const args = ["--mac", "--arm64"];
+  const base = numericBaseVersion(version);
+  const args = ["--mac", "--arm64", `--config.mac.bundleShortVersion=${base}`, `--config.buildVersion=${base}`];
   if (dirOnly) args.push("--dir");
   run(join(repoRoot, "node_modules", ".bin", "electron-builder"), args, {
     env: {
@@ -337,7 +348,7 @@ async function main() {
   }
   log(`staged ${relative(repoRoot, backendDir)} and ${relative(repoRoot, appDir)}`);
 
-  pack();
+  pack(version);
 
   const releaseDir = join(repoRoot, "release");
   if (existsSync(releaseDir)) {

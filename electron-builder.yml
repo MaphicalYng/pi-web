@@ -20,6 +20,13 @@ directories:
   output: release
   buildResources: resources
 
+# The artifact carries the whole package.json version, so this fork's DMG stays
+# distinguishable from upstream's: `Pi Web-0.15.0-imp-0.1.0-arm64.dmg` against
+# `Pi Web-0.15.0-arm64.dmg`. ${version} is appInfo.version, which buildVersion
+# does not touch, so the numeric base that goes into the plist (see pack() in
+# desktop/packaging/build-desktop.mjs) is not what lands here.
+artifactName: "${productName}-${version}-${arch}.${ext}"
+
 # Only the compiled shell (main/preload/shared) is packed; the backend is
 # extraResources so it keeps real paths.
 files:

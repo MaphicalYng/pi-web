@@ -23,11 +23,17 @@ export interface BuildVersionParts {
 /**
  * `0.15.0-desktop-0.1.0-5d8d631` on a desktop build,
  * `0.15.0-imp-5d8d631` on a web one.
+ *
+ * A release version that already names the fork and its own release number
+ * (`0.15.0-imp-0.1.0`, the value this fork tags) keeps that suffix as it
+ * stands: `0.15.0-imp-0.1.0-5d8d631` on either build, never a second `-imp`
+ * and never the shell's version repeated.
  */
 export function buildVersionLabel(parts: BuildVersionParts): string {
   const version = parts.appVersion?.trim() || "0.0.0";
   const commit = parts.commit?.trim() || "unknown";
   const desktopVersion = parts.desktopVersion?.trim();
+  if (version.includes(`-${WEB_BUILD_FLAVOR}`)) return `${version}-${commit}`;
   return desktopVersion
     ? `${version}-desktop-${desktopVersion}-${commit}`
     : `${version}-${WEB_BUILD_FLAVOR}-${commit}`;

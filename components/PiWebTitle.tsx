@@ -18,9 +18,18 @@ export const VERSION_SHOWN_MS = 3000;
 export const SCRAMBLE_FRAMES_PER_CHAR = 4;
 export const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
 
-/** The versions as the brand shows them: "0.11.0p1.1.0". */
+/**
+ * The versions as the brand shows them: "0.11.0p1.1.0".
+ *
+ * The brand has about a dozen characters before the sidebar's 180px minimum
+ * cuts it (the versions take the 11px of data-fit 2 there, and still want a
+ * digit to spare), so a pre-release suffix is dropped: this fork's
+ * `0.15.0-imp-0.1.0` shows as `0.15.0`, its version family. The exact build
+ * (`0.15.0-imp-0.1.0-<commit>`) is what the chat's footer line carries.
+ */
 export function brandVersionText(appVersion: string | undefined, piVersion: string | undefined): string {
-  return `${appVersion ?? "0.0.0"}p${piVersion ?? "0.0.0"}`;
+  const app = (appVersion ?? "0.0.0").split("-")[0];
+  return `${app}p${piVersion ?? "0.0.0"}`;
 }
 
 /** How many frames `target` takes to settle. */

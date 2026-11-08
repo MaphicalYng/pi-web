@@ -15,6 +15,7 @@ Local browser UI for the [pi coding agent](https://github.com/earendil-works/pi)
 - **Project file tools**: browse and upload files, inspect Git diffs, and preview source, Markdown, images, audio, PDFs, and DOCX files with automatic refresh.
 - **Git worktrees**: switch checkouts from the sidebar while keeping sessions from the same repository grouped together.
 - **Web-based configuration**: manage provider login and API keys, models, model tests, plugin packages, and skills without leaving Pi Web.
+- **Bottom terminal dock**: a shell under the composer, opened with <code>Ctrl+&#96;</code>, with its own theme, extra keys, and a height the browser remembers.
 - **English, Simplified Chinese, and Traditional Chinese UI**: Pi Web follows the browser language initially and provides a language switcher in the top bar.
 
 ## Quick Start
@@ -87,7 +88,7 @@ Password authentication does not encrypt the connection. Do not expose Pi Web ov
 
 ### Docker
 
-Each release publishes an image to `ghcr.io/agegr/pi-web`. See [Running Pi Web in Docker](./docs/docker.md) for it, the Compose example and which volumes to keep.
+This fork publishes no image. Build one from the `Dockerfile` in this repository; see [Running Pi Web in Docker](./docs/docker.md) for the build, the Compose example and which volumes to keep.
 
 ### HTTP Proxy
 
