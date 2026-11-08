@@ -595,6 +595,11 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [groupExpansion, setGroupExpansion] = useState<Readonly<Record<string, boolean>>>({});
   const [keptOpenGroups, setKeptOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [moreShown, setMoreShown] = useState<Readonly<Record<string, number>>>({});
+  // The rows a "show more" just revealed, fading in once (see below).
+  const [enteringRowKeys, setEnteringRowKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const revealedPendingRef = useRef(false);
+  const rowKeysRef = useRef<ReadonlySet<string>>(new Set());
+  const enteringTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
   // The archive view's folded projects, per browser (lib/sidebar-prefs.ts).
   const [archiveCollapsed, setArchiveCollapsed] = useState<readonly string[]>([]);
@@ -2301,10 +2306,35 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     const row = model.rows.find((item) => (item.kind === "group-more" && item.projectKey === key)
       || (item.kind === "pinned-more" && key === PINNED_MORE_KEY));
     if (row?.kind !== "group-more" && row?.kind !== "pinned-more") return;
+    // The effect below reads the rows that appear, not this click's window.
+    revealedPendingRef.current = true;
     setMoreShown((prev) => showMoreFamilies(prev, key, row.nextShown));
   }, [model.rows]);
   const handleShowLess = useCallback((key: string) => {
     setMoreShown((prev) => showLessFamilies(prev, key));
+  }, []);
+
+  // A "show more" reveals its window at once, which reads as a jump. The rows
+  // that appeared fade in (120ms, sidebar.css). Only a click marks them: the
+  // rows are virtualized and remount while scrolling, so animating every mount
+  // would replay the fade up and down the list.
+  useEffect(() => {
+    const keys = new Set(model.rows.map((row) => row.key));
+    const previous = rowKeysRef.current;
+    rowKeysRef.current = keys;
+    if (!revealedPendingRef.current) return;
+    revealedPendingRef.current = false;
+    const added = [...keys].filter((key) => !previous.has(key));
+    if (added.length === 0) return;
+    setEnteringRowKeys(new Set(added));
+    if (enteringTimerRef.current) clearTimeout(enteringTimerRef.current);
+    enteringTimerRef.current = setTimeout(() => {
+      enteringTimerRef.current = null;
+      setEnteringRowKeys(new Set());
+    }, 220);
+  }, [model.rows]);
+  useEffect(() => () => {
+    if (enteringTimerRef.current) clearTimeout(enteringTimerRef.current);
   }, []);
 
   const handleTogglePinned = () => {
@@ -2992,6 +3022,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
               <SessionTree
                 {...treeProps}
                 rows={model.rows}
+                enteringKeys={enteringRowKeys}
                 emptyLabel={t("sidebar.noSessions")}
                 reveal={treeReveal}
                 onRevealHandled={handleRevealHandled}

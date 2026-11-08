@@ -198,6 +198,25 @@ export function placeSidebarMenu(
 }
 
 /**
+ * The corner a menu grows out of: the edge it was opened from. A menu below a
+ * button expands from its top edge, one that flipped above it from its bottom
+ * edge, and a right-click menu from the pointer's own corner. Without it every
+ * menu scaled up from its centre, which reads as appearing out of nowhere
+ * instead of out of the thing that was clicked.
+ */
+export function sidebarMenuOrigin(
+  anchor: SidebarMenuAnchor,
+  placed: { left: number; top: number; width: number; height: number },
+): string {
+  const point = anchor.kind === "point"
+    ? { x: anchor.x, y: anchor.y }
+    : { x: anchor.align === "end" ? anchor.rect.right : anchor.rect.left, y: anchor.rect.bottom };
+  const horizontal = point.x < placed.left + placed.width / 2 ? "left" : "right";
+  const vertical = point.y < placed.top + placed.height / 2 ? "top" : "bottom";
+  return `${vertical} ${horizontal}`;
+}
+
+/**
  * The enabled item a typed letter activates: its `shortcut`, case-insensitive
  * (Shift+D still means D, and tells Delete to skip its confirmation).
  */
@@ -639,6 +658,9 @@ export function SidebarMenu({
       });
       surface.style.left = `${left}px`;
       surface.style.top = `${top}px`;
+      surface.style.transformOrigin = sidebarMenuOrigin(current, {
+        left, top, width: rect.width, height: rect.height,
+      });
     };
     position();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(position);

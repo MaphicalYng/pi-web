@@ -197,7 +197,7 @@
   font-size: 12px;
   font-weight: 400;
   text-align: left;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 
 .config-sidebar-item:not(:disabled):hover,
@@ -1233,7 +1233,12 @@
   letter-spacing: 0;
   line-height: 1;
   white-space: nowrap;
-  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease, transform var(--dur-press) var(--ease-out);
+}
+
+/* Pressed: a settings button gives under the finger like the sidebar's do. */
+.config-button:not(:disabled):active {
+  transform: scale(0.97);
 }
 
 .config-button-default {
@@ -1303,13 +1308,13 @@
 .config-button-primary.is-success {
   border-color: #16a34a;
   background: #16a34a;
-  animation: saved-pop 0.45s ease;
+  animation: saved-pop 260ms var(--ease-out);
 }
 
 .config-button-success-icon {
   flex-shrink: 0;
   stroke-dasharray: 18;
-  animation: saved-check-draw 0.35s ease forwards;
+  animation: saved-check-draw 240ms var(--ease-out) forwards;
 }
 
 .config-button.is-pushed-right {
@@ -1326,7 +1331,7 @@
   border-radius: 9px;
   background: var(--bg-selected);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--dur-press) var(--ease-out), border-color var(--dur-press) var(--ease-out);
 }
 
 .config-switch[aria-checked="true"] {
@@ -1366,7 +1371,7 @@
   height: 12px;
   border-radius: 50%;
   background: var(--text-muted);
-  transition: transform 0.15s, background 0.15s;
+  transition: transform var(--dur-press) var(--ease-out), background var(--dur-press) var(--ease-out);
 }
 
 .config-switch[aria-checked="true"] .config-switch-knob {
@@ -1678,6 +1683,15 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
+  /* Switching a section (a tab on desktop, a row on a phone) used to snap the
+     pane. Fading in covers the swap without delaying anything: the host is
+     already mounted and only comes back from `hidden`. */
+  animation: settings-section-in 140ms var(--ease-out);
+}
+
+@keyframes settings-section-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* The page scrolls across the dialog's full width, so its scrollbar sits at the
@@ -2807,5 +2821,21 @@ select.mcp-add-input {
       padding-bottom: max(8px, env(safe-area-inset-bottom));
       padding-left: max(59px, env(safe-area-inset-left));
     }
+  }
+}
+
+/* A settings tab's own press: the label dims, nothing moves (the 24px
+   indicator is already a transform and must not be composited with it). */
+.settings-section-tab:active {
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-section-host {
+    animation: none;
+  }
+
+  .config-button:active {
+    transform: none;
   }
 }

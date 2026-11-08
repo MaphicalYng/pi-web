@@ -24,6 +24,20 @@
   --font-mono-font: var(--font-mono);
 }
 
+/* Motion language: three curves, three durations, one place. Anything that
+   needs to feel different picks another curve - it does not invent one. */
+:root {
+  /* taps and pressed states */
+  --dur-press: 160ms;
+  /* menus, popovers, fades */
+  --dur-ui: 180ms;
+  /* the side panels' width */
+  --dur-panel: 200ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 :root,
 [data-theme="light"] {
   color-scheme: light;
@@ -1162,6 +1176,37 @@ button.extension-widget-trigger:focus-visible {
   opacity: 0.5;
 }
 
+/* The build in use, at the status row's right end: never scrolled away with the
+   statuses, never a reason for the shelf to grow a second line. It gives way
+   first when the chat is narrow, its whole text kept in the tooltip. */
+.extension-status-shelf.has-build > .extension-status-row {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.extension-status-build {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+  margin-left: auto;
+  padding: 8px 12px;
+  border-left: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+}
+
+/* Alone in the row there is nothing to divide from. */
+.extension-status-shelf:not(.has-status):not(.has-widgets) > .extension-status-build {
+  border-left: 0;
+}
+
 /* Touch screens get taller cells when there is something to tap, widget triggers
    included, so the row stays level. */
 @media (pointer: coarse) {
@@ -1207,6 +1252,38 @@ pre, code {
 /* Inline code inside a heading or emphasis keeps that surrounding emphasis. */
 .markdown-body :is(h1, h2, h3, h4, h5, h6, strong, b) code {
   font-weight: inherit;
+}
+
+/* Switching sessions empties the panel into its loading placeholder, then the
+   new transcript arrives - so this is an entrance out of nothing, not a
+   crossfade between two visible texts, and it may start from 0. It rides on the
+   inner content wrapper, never the scroller: a transform on the scroll
+   container becomes the containing block for its sticky and fixed descendants.
+   340ms and 12px: this is a navigation the reader chose, so it may be seen - but
+   it must still end before the eye starts waiting on it. components/ChatWindow.tsx sets the class for one
+   switch only, once the transcript is visible. */
+.chat-transcript.is-swapping .chat-transcript-inner {
+  animation: chat-transcript-in 340ms var(--ease-out);
+}
+
+/* The placeholder gets its own entrance, so a switch never cuts from the old
+   transcript to bare text, and a slow pulse, so the 0.5-2s a session takes to
+   load reads as work in progress rather than a stalled screen. */
+.chat-loading {
+  animation: chat-loading-in 140ms var(--ease-out);
+}
+
+.chat-loading-text {
+  color: var(--text-muted);
+  animation: chat-loading-pulse 1.6s var(--ease-in-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-transcript.is-swapping .chat-transcript-inner,
+  .chat-loading,
+  .chat-loading-text {
+    animation: none;
+  }
 }
 
 /* react-markdown output styles */
@@ -1416,7 +1493,7 @@ pre, code {
 @media (hover: hover) {
   .markdown-math-copy {
     opacity: 0;
-    transition: opacity 0.12s ease;
+    transition: opacity 120ms var(--ease-out);
   }
   .markdown-math-display:hover .markdown-math-copy,
   .markdown-math-copy:focus-visible {
@@ -2409,6 +2486,25 @@ pre, code {
   margin: 0 auto;
 }
 
+/* The empty session's brand leaving: opacity only, over the first message that
+   already took its place (components/ChatWindow.tsx keeps it mounted for
+   HERO_EXIT_MS). Moving it would fight the transcript underneath. */
+.new-session-hero.is-leaving {
+  animation: new-session-hero-out 140ms var(--ease-out) forwards;
+}
+
+/* The composer's send button (components/ChatInput.tsx): the most-pressed
+   control in the app had no pressed state at all, only a colour change. */
+.chat-send-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-send-button:active:not(:disabled) {
+    transform: none;
+  }
+}
+
 .new-session-brand {
   display: flex;
   align-items: center;
@@ -2457,7 +2553,11 @@ pre, code {
   flex: none;
 }
 
-.new-session-meta > .new-session-meta-pi {
+/* The build (pi-web's version, the flavor and the commit) and pi's version:
+   the two that give way before the line wraps or runs under the logo. Each
+   keeps its ellipsis, so a narrow window cuts them instead of overflowing. */
+.new-session-meta > .new-session-meta-pi,
+.new-session-meta > .new-session-meta-version {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -2996,20 +3096,40 @@ span.token.table {
   50% { opacity: 0.5; }
 }
 
-@keyframes notice-shelf-in {
+@keyframes new-session-hero-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes chat-transcript-in {
   from {
     opacity: 0;
-    height: 0;
-    max-height: 0;
-    min-height: 0;
-    margin-bottom: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes chat-loading-in {
+  from { opacity: 0; }
+}
+
+@keyframes chat-loading-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/* Compositor only: no height, max-height, min-height or margin. Animating those
+   four re-laid-out the whole transcript on every frame of every toast. The card
+   takes its finished size at once (one reflow) and only fades and slides. */
+@keyframes notice-shelf-in {
+  /* The card keeps its inline min-height: these frames touch nothing but the
+     compositor. Height, max-height, min-height and margin used to be here, and
+     they re-laid-out the whole transcript on every frame of every notice. */
+  from {
+    opacity: 0;
     transform: translateY(-6px) scale(0.995);
   }
   to {
     opacity: 1;
-    height: 60px;
-    max-height: 60px;
-    min-height: 60px;
     transform: translateY(0) scale(1);
   }
 }
@@ -3017,17 +3137,10 @@ span.token.table {
 @keyframes notice-shelf-out {
   from {
     opacity: 1;
-    height: 60px;
-    max-height: 60px;
-    min-height: 60px;
     transform: translateY(0) scale(1);
   }
   to {
     opacity: 0;
-    height: 0;
-    max-height: 0;
-    min-height: 0;
-    margin-bottom: 0;
     transform: translateY(-5px) scale(0.995);
   }
 }
@@ -3058,7 +3171,7 @@ span.token.table {
   width: 2px;
   pointer-events: none;
   background: transparent;
-  transition: background 0.12s ease;
+  transition: background 120ms var(--ease-out);
 }
 .panel-resize-handle:hover::after,
 .panel-resize-handle:focus-visible::after,
@@ -3077,7 +3190,9 @@ span.token.table {
   .sidebar-container {
     position: relative;
     overflow: hidden;
-    transition: width 0.2s ease, min-width 0.2s ease;
+    /* min-width is not in the transition on purpose: it tracks width one-to-one
+       here, so animating it bought nothing and doubled the layout work. */
+    transition: width var(--dur-panel) var(--ease-out);
   }
   .sidebar-container.sidebar-open {
     width: var(--sidebar-width, 260px);
@@ -3103,7 +3218,7 @@ span.token.table {
 @media (min-width: 960px) {
   .right-panel-container {
     overflow: hidden;
-    transition: width 0.2s ease, min-width 0.2s ease;
+    transition: width var(--dur-panel) var(--ease-out);
     flex-shrink: 0;
   }
   .right-panel-container.right-panel-open {
@@ -3139,7 +3254,7 @@ span.token.table {
     background: rgba(0, 0, 0, 0.24);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--dur-ui) var(--ease-out);
   }
   .right-panel-overlay-backdrop.is-open {
     opacity: 1;
@@ -3155,7 +3270,7 @@ span.token.table {
     min-width: 300px;
     overflow: hidden;
     box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
-    transition: transform 0.2s ease;
+    transition: transform var(--dur-panel) var(--ease-out);
   }
   .right-panel-container.right-panel-open {
     transform: translateX(0);
@@ -3225,7 +3340,9 @@ span.token.table {
     width: 280px;
     max-width: 85vw;
     height: var(--app-viewport-height, 100dvh);
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    /* The drawer slides; its shadow is not animated (it repainted the panel on
+       every frame). Dragging in from the edge wants a drawer curve, not ease. */
+    transition: transform var(--dur-panel) var(--ease-drawer);
   }
   .sidebar-container.sidebar-open {
     transform: translateX(0);
@@ -3242,7 +3359,7 @@ span.token.table {
     height: var(--app-viewport-height, 100dvh);
     z-index: 250;
     overflow: hidden;
-    transition: transform 0.2s ease;
+    transition: transform var(--dur-panel) var(--ease-out);
   }
   .right-panel-container.right-panel-open {
     width: auto;

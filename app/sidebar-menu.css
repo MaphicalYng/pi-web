@@ -26,7 +26,10 @@
   color: var(--text);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
   font-size: 12px;
-  animation: sidebar-menu-in 0.12s ease-out;
+  /* The origin is inline, set from the placement (components/SidebarMenu.tsx):
+     the menu grows out of the edge it was opened from, not out of its centre. */
+  transform-origin: top left;
+  animation: sidebar-menu-in var(--dur-ui) var(--ease-out);
 }
 
 .sidebar-menu:focus {
@@ -36,11 +39,11 @@
 @keyframes sidebar-menu-in {
   from {
     opacity: 0;
-    transform: translateY(-3px);
+    transform: translateY(-3px) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -60,6 +63,7 @@
   font-size: 12px;
   text-align: left;
   cursor: pointer;
+  transition: background-color 120ms var(--ease-out), transform var(--dur-press) var(--ease-out);
 }
 
 .sidebar-menu-item:focus {
@@ -69,6 +73,12 @@
 .sidebar-menu-item:not([aria-disabled="true"]):hover,
 .sidebar-menu-item:focus-visible {
   background: var(--bg-hover);
+}
+
+/* Pressed: the row gives a little under the finger. A menu row is a light
+   control, so the squeeze stays at 0.98 - enough to feel, too small to notice. */
+.sidebar-menu-item:not([aria-disabled="true"]):active {
+  transform: scale(0.98);
 }
 
 .sidebar-menu-item[aria-disabled="true"] {
@@ -170,10 +180,15 @@
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out), transform var(--dur-press) var(--ease-out);
 }
 
 .sidebar-menu-secondary:focus {
   outline: none;
+}
+
+.sidebar-menu-secondary:not([aria-disabled="true"]):active {
+  transform: scale(0.92);
 }
 
 .sidebar-menu-secondary:not([aria-disabled="true"]):hover,
@@ -445,7 +460,9 @@
   color: var(--text);
   box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.12);
   font-size: 15px;
-  animation: sidebar-sheet-in 0.12s ease-out;
+  /* A bottom sheet drops in from below: it scales up from its own bottom edge. */
+  transform-origin: 50% 100%;
+  animation: sidebar-sheet-in var(--dur-ui) var(--ease-out);
 }
 
 .sidebar-sheet:focus {
@@ -468,11 +485,11 @@ html[data-keyboard-open] .sidebar-sheet {
 
 @keyframes sidebar-sheet-in {
   from {
-    transform: translateY(16px);
+    transform: translateY(16px) scale(0.98);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
@@ -555,6 +572,11 @@ html[data-keyboard-open] .sidebar-sheet {
   font: inherit;
   font-size: 15px;
   cursor: pointer;
+  transition: background-color 120ms var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+
+.sidebar-sheet-cancel:active {
+  transform: scale(0.98);
 }
 
 .sidebar-sheet-cancel:hover {
@@ -590,7 +612,24 @@ html[data-keyboard-open] .sidebar-sheet {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   font-size: 12px;
   pointer-events: auto;
-  animation: sidebar-toast-in 0.16s ease-out;
+  animation: sidebar-toast-in var(--dur-ui) var(--ease-out);
+}
+
+/* Dismissed: the card fades down before it unmounts (components/SidebarToast.tsx
+   keeps it mounted for this long). Without it the toast vanished on a frame. */
+.sidebar-toast.is-leaving {
+  animation: sidebar-toast-out 140ms var(--ease-out) forwards;
+}
+
+@keyframes sidebar-toast-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(6px);
+    opacity: 0;
+  }
 }
 
 @keyframes sidebar-toast-in {
@@ -642,10 +681,15 @@ html[data-keyboard-open] .sidebar-sheet {
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
+  transition: background-color 120ms var(--ease-out), transform var(--dur-press) var(--ease-out);
 }
 
 .sidebar-toast-action:hover {
   background: var(--bg-hover);
+}
+
+.sidebar-toast-action:active {
+  transform: scale(0.96);
 }
 
 .sidebar-toast-dismiss {
@@ -661,11 +705,16 @@ html[data-keyboard-open] .sidebar-sheet {
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out), transform var(--dur-press) var(--ease-out);
 }
 
 .sidebar-toast-dismiss:hover {
   background: var(--bg-hover);
   color: var(--text-muted);
+}
+
+.sidebar-toast-dismiss:active {
+  transform: scale(0.92);
 }
 
 .sidebar-toast-action:focus-visible,
@@ -710,6 +759,15 @@ html[data-keyboard-open] .sidebar-sheet {
   .sidebar-sheet-backdrop,
   .sidebar-toast {
     animation: none;
+  }
+
+  /* The squeeze is motion, the colour is feedback: keep the colour. */
+  .sidebar-menu-item:active,
+  .sidebar-menu-secondary:active,
+  .sidebar-sheet-cancel:active,
+  .sidebar-toast-action:active,
+  .sidebar-toast-dismiss:active {
+    transform: none;
   }
 }
 

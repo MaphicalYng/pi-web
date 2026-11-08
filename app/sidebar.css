@@ -981,7 +981,12 @@ a.session-tree-main {
   font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s, transform var(--dur-press) var(--ease-out);
+}
+
+.sidebar-tab:active,
+.sidebar-new-button:active {
+  transform: scale(0.97);
 }
 
 .sidebar-tab,
@@ -1405,6 +1410,21 @@ a.session-tree-main {
   }
 }
 
+/* The window a "show more" opened (components/SessionSidebar.tsx marks those
+   rows for 220ms): it fades in, so the list grows instead of jumping under the
+   pointer. The rows are virtualized and remount while scrolling, so only a
+   marked row ever animates - never every row that mounts. */
+.session-tree-row.is-entering {
+  animation: sidebar-row-in 120ms var(--ease-out) backwards;
+}
+
+@keyframes sidebar-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
 .sidebar-archive-bar {
   display: flex;
   flex: none;
@@ -1537,7 +1557,11 @@ a.session-tree-main {
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;
-  transition: color 0.12s, background 0.12s;
+  transition: color 0.12s, background 0.12s, transform var(--dur-press) var(--ease-out);
+}
+
+.sidebar-tool-button:not(:disabled):active {
+  transform: scale(0.92);
 }
 
 .sidebar-tool-button:not(:disabled):hover {
@@ -1653,7 +1677,8 @@ a.session-tree-main {
   }
 
   .sidebar-archive-view.is-entering,
-  .sidebar-archive-view.is-leaving {
+  .sidebar-archive-view.is-leaving,
+  .session-tree-row.is-entering {
     animation: none;
   }
 }

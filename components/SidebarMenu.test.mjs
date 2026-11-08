@@ -13,6 +13,7 @@ const {
   SidebarMenu,
   SidebarMenuSurface,
   placeSidebarMenu,
+  sidebarMenuOrigin,
   findSidebarMenuShortcut,
   menuFocusReturnTarget,
   menuBodyFocusTarget,
@@ -166,6 +167,21 @@ test("desktop placement: below a button, aligned by edge, flipping above when it
   assert.deepEqual(placeSidebarMenu({ kind: "rect", rect, align: "start" }, tall, viewport), { left: 220, top: 92 });
 });
 
+test("desktop placement: a menu grows out of the edge it was opened from", () => {
+  const size = { width: 208, height: 150 };
+  const rect = { left: 220, top: 100, right: 242, bottom: 122 };
+  // Below a button: from its top edge, on the side the button sits.
+  assert.equal(sidebarMenuOrigin({ kind: "rect", rect, align: "start" }, { left: 220, top: 126, ...size }), "top left");
+  assert.equal(sidebarMenuOrigin({ kind: "rect", rect, align: "end" }, { left: 34, top: 126, ...size }), "top right");
+  // Flipped above the button: from its bottom edge.
+  const low = { left: 220, top: 700, right: 242, bottom: 722 };
+  assert.equal(sidebarMenuOrigin({ kind: "rect", rect: low, align: "end" }, { left: 34, top: 546, ...size }), "bottom right");
+  // A right-click menu: from the pointer's own corner, then flipped up and
+  // left when it did not fit.
+  assert.equal(sidebarMenuOrigin({ kind: "point", x: 100, y: 120 }, { left: 100, top: 120, ...size }), "top left");
+  assert.equal(sidebarMenuOrigin({ kind: "point", x: 900, y: 700 }, { left: 700, top: 520, ...size }), "bottom right");
+});
+
 test("shortcut letters find enabled items, case-insensitively", () => {
   assert.equal(findSidebarMenuShortcut(items, "p")?.id, "pin");
   assert.equal(findSidebarMenuShortcut(items, "D")?.id, "delete");
@@ -258,7 +274,7 @@ const projectChoices = Array.from({ length: SIDEBAR_MENU_FILTER_MIN_CHOICES }, (
   id: `project:${index}`,
   label: index === 3 ? "pi-web" : `project-${index}`,
   note: index === 5 ? "Workspace" : undefined,
-  title: `/home/me/${index === 6 ? "clients/acme" : `p${index}`}`,
+  title: `~/${index === 6 ? "clients/acme" : `p${index}`}`,
   checked: index === 0,
   onSelect: noop,
 }));
@@ -285,7 +301,7 @@ test("a filter shows once a menu has enough choices, and narrows only the choice
 
 test("a classic menu: main's dropdown look, paths cut at their left, a footer and a row of its own", () => {
   const classicItems = [
-    { type: "item", id: "app", label: "~/work/app", mono: true, path: true, title: "/home/me/work/app", checked: true, onSelect: noop },
+    { type: "item", id: "app", label: "~/work/app", mono: true, path: true, title: "~/work/app", checked: true, onSelect: noop },
     { type: "custom", id: "feature", content: h("div", { className: "question" }, h("button", { type: "button", "data-sidebar-menu-item": "" }, "Force")) },
     { type: "item", id: "default", label: "Use default directory", onSelect: noop },
   ];

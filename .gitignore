@@ -52,8 +52,14 @@ next-env.d.ts
 .factory
 e2e_*.mjs
 
-# Reviewed false-positive exemptions live in ~/.git-leak-audit, never in the repo.
+# Pre-push audit allowlist: a per-audit, local exemption. Committing it turns a
+# once-reviewed false positive into a standing one. Real exemptions live in
+# ~/.git-leak-audit, never in the repo.
 .secret-audit-allow
+
+# Plan files are working notes, not deliverables: they carry unreviewed
+# assumptions and the plan after this one. Keep them local.
+plans/
 
 # Design source archives stay local; the assets they carry are committed above.
 *.zip
