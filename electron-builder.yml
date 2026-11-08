@@ -33,6 +33,10 @@ asar: true
 npmRebuild: false
 buildDependenciesFromSource: false
 
+# An ad-hoc signature whose identifier matches Info.plist; macOS refuses
+# notifications (UNNotification, Electron 42+) to a bundle it cannot identify.
+afterPack: desktop/packaging/after-pack.mjs
+
 # No signing, no notarization, no auto-update: macOS arm64 only.
 mac:
   target:
