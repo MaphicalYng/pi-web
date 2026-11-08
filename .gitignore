@@ -55,3 +55,7 @@ e2e_*.mjs
 # Pre-push audit allowlist: a per-audit, local exemption. Committing it turns a
 # once-reviewed false positive into a standing one.
 .secret-audit-allow
+
+# Plan files are working notes, not deliverables: they carry unreviewed
+# assumptions and the plan after this one. Keep them local.
+plans/
