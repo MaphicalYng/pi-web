@@ -755,6 +755,7 @@ export const enLocale: LocalePlugin = {
     "chat.extensionExpand": "Expand",
     "chat.extensionMaximize": "Maximize",
     "chat.extensionRestoreSize": "Restore size",
+    "chat.extensionMove": "Drag to move",
     "chat.extensionMoreWaiting": "+{count} more",
     "chat.cancel": "Cancel",
     "chat.confirm": "Confirm",

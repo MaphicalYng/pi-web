@@ -755,6 +755,7 @@ export const zhTWLocale: LocalePlugin = {
     "chat.extensionExpand": "展開",
     "chat.extensionMaximize": "放大",
     "chat.extensionRestoreSize": "還原尺寸",
+    "chat.extensionMove": "拖曳可移動視窗",
     "chat.extensionMoreWaiting": "還有 {count} 個",
     "chat.cancel": "取消",
     "chat.confirm": "確認",
