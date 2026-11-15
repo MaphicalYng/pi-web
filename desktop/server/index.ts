@@ -35,6 +35,7 @@ import {
   installConsoleRedaction,
   type Redactor,
 } from "./redaction";
+import { applyStandaloneConfigEnv } from "./standalone-config";
 
 /** How long the shell may take to hand a session over after `ready`. */
 export const HANDOFF_TIMEOUT_MS = 30_000;
@@ -139,6 +140,10 @@ export async function startDesktopBackend(options: DesktopBackendOptions = {}): 
     // process as well; wrap it before those modules can log a secret.
     installConsoleRedaction(redact);
     assertStandaloneRoot(launch.serverDir);
+    // Next's loadConfig re-reads ambient next.config.ts (and transpiles it with
+    // SWC) unless the staged config short-circuits it; do that here, the same
+    // way Next's generated standalone server.js does.
+    applyStandaloneConfigEnv(launch.serverDir);
     if (launch.sessionFromEnv !== undefined) install(launch.sessionFromEnv);
     enterServerDir(launch.serverDir);
 
