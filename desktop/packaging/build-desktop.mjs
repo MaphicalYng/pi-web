@@ -39,7 +39,7 @@ const skipNext = argv.has("--skip-next");
 const skipPack = argv.has("--skip-pack");
 const dirOnly = argv.has("--dir");
 const noPrune = argv.has("--no-prune");
-const dropSwc = argv.has("--drop-swc");
+const keepSwc = argv.has("--keep-swc");
 
 function log(message) {
   process.stdout.write(`[build-desktop] ${message}\n`);
@@ -378,7 +378,7 @@ async function main() {
   await assembleBackend();
 
   if (!noPrune) {
-    const pruned = await pruneBackend(backendDir, { dropSwc });
+    const pruned = await pruneBackend(backendDir, { dropSwc: !keepSwc });
     log(`pruned backend: ${pruned.files} files, ${(pruned.bytes / 1024 / 1024).toFixed(1)} MB`);
   }
 

@@ -15,8 +15,11 @@
 // node_modules/@<scope>/<pkg>), never to the package itself — a package named
 // `docs` or `@scope/docs` survives. Symlinks are never followed or deleted.
 //
-// dropSwc (SIZE-1B §3.1 experiment) additionally removes
-// node_modules/@next/swc-darwin-arm64; default off.
+// dropSwc additionally removes node_modules/@next/swc-darwin-arm64 — the
+// binding is build-time only (transpiling next.config.ts); the backend never
+// loads it at runtime because applyStandaloneConfigEnv short-circuits Next's
+// config search (see the SWC experiment record kept outside the repo).
+// build-desktop passes this by default; `--keep-swc` opts out.
 
 import { readdir, lstat, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
