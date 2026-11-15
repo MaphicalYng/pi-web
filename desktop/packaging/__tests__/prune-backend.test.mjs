@@ -54,6 +54,22 @@ test("file rules delete maps, declarations and doc files; LICENSE always stays",
   assert.equal(result.bytes, 70);
 });
 
+test("COPYING* is a kept license-class name, even when it matches a delete rule", async () => {
+  const root = await makeBackend();
+  await write(root, "pkg/COPYING");
+  await write(root, "pkg/COPYING.d.ts"); // matches a delete rule, must still stay
+  await write(root, "pkg/copying-lesser");
+  await write(root, "pkg/COPYRIGHT"); // not a license-class name; plain file stays anyway
+  await write(root, "pkg/notes.d.ts"); // ordinary declaration is still pruned
+
+  await pruneBackend(root);
+
+  for (const kept of ["pkg/COPYING", "pkg/COPYING.d.ts", "pkg/copying-lesser", "pkg/COPYRIGHT"]) {
+    assert.equal(exists(root, kept), true, `${kept} must be kept`);
+  }
+  assert.equal(exists(root, "pkg/notes.d.ts"), false);
+});
+
 test("directory-name rules only fire inside a package, never on the package root", async () => {
   const root = await makeBackend();
   await write(root, "pkg/test/deep.js");

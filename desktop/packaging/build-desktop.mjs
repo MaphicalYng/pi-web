@@ -365,6 +365,28 @@ async function assertPackedAsarClean() {
   log(`app.asar clean: ${entries.length} entries, no node_modules`);
 }
 
+/**
+ * SIZE-1B acceptance: pruning keeps third-party license/notice files
+ * (LICENSE-, LICENCE-, NOTICE-, COPYING- prefixed). Representative spot-check
+ * on the staged backend — the runtime's most visible packages must keep theirs.
+ */
+async function assertLicensesRetained() {
+  const nodeModules = join(backendDir, "next-standalone", "node_modules");
+  const representatives = ["next", "react", "node-pty"];
+  const isLicenseClass = (name) => /^(license|licence|notice|copying)/i.test(name);
+  const stripped = [];
+  for (const pkg of representatives) {
+    const pkgDir = join(nodeModules, pkg);
+    if (!existsSync(pkgDir)) continue;
+    const names = await readdir(pkgDir);
+    if (!names.some((name) => isLicenseClass(name))) stripped.push(pkg);
+  }
+  if (stripped.length > 0) {
+    throw new Error(`pruning stripped license/notice files from: ${stripped.join(", ")}`);
+  }
+  log(`licenses retained: ${representatives.join(", ")}`);
+}
+
 async function main() {
   const version = (await readJson(join(repoRoot, "package.json"))).version;
   log(`Pi Web desktop ${version}`);
@@ -380,6 +402,7 @@ async function main() {
   if (!noPrune) {
     const pruned = await pruneBackend(backendDir, { dropSwc: !keepSwc });
     log(`pruned backend: ${pruned.files} files, ${(pruned.bytes / 1024 / 1024).toFixed(1)} MB`);
+    await assertLicensesRetained();
   }
 
   const check = [

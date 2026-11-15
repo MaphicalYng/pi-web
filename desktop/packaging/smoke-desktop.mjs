@@ -12,7 +12,7 @@
 // Usage: node desktop/packaging/smoke-desktop.mjs [--app <path>] [--timeout <ms>]
 
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -79,6 +79,28 @@ function checkLayout() {
  * (electron-builder's node-module collection is off via the beforeBuild hook),
  * and the files whitelist must keep the shell entry points in place.
  */
+/**
+ * SIZE-1B acceptance: third-party license/notice files must survive pruning.
+ * Representative spot-check on the staged backend — the packages the runtime
+ * loads most visibly (Next.js, React, node-pty) each keep at least one
+ * license-class file at the package root.
+ */
+function checkLicenses(resources) {
+  const nodeModules = join(resources, "backend", "next-standalone", "node_modules");
+  const representatives = ["next", "react", "node-pty"];
+  const isLicenseClass = (name) => /^(license|licence|notice|copying)/i.test(name);
+  const stripped = representatives.filter((pkg) => {
+    const pkgDir = join(nodeModules, pkg);
+    if (!existsSync(pkgDir)) return false;
+    return !readdirSync(pkgDir).some((name) => isLicenseClass(name));
+  });
+  record(
+    "licenses retained",
+    stripped.length === 0,
+    stripped.length === 0 ? `${representatives.join(", ")} keep their notices` : `stripped: ${stripped.join(", ")}`,
+  );
+}
+
 function checkAsarClean(resources) {
   const { listPackage } = createRequire(import.meta.url)("@electron/asar");
   // listPackage paths are rooted: "/package.json", "/main/index.js".
@@ -258,6 +280,7 @@ async function main() {
   }
   const resources = checkLayout();
   checkAsarClean(resources);
+  checkLicenses(resources);
   await checkNative(resources);
   await checkData();
   await launch();

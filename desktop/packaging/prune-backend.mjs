@@ -26,7 +26,10 @@ import { join } from "node:path";
 
 const DOC_FILE_NAMES = new Set(["readme.md", "changelog.md", "history.md"]);
 const PRUNE_DIR_NAMES = new Set(["test", "tests", "__tests__", "example", "examples", "docs"]);
-const KEEP_PREFIXES = ["license", "licence", "notice"];
+// Third-party license/notice files are legal obligations: every name variant
+// (LICENSE*, LICENCE*, NOTICE*, COPYING*) survives pruning, even when its
+// extension matches a prunable rule (LICENSE.d.ts).
+const KEEP_PREFIXES = ["license", "licence", "notice", "copying"];
 
 async function fileSize(path) {
   const info = await lstat(path);
