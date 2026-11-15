@@ -77,8 +77,6 @@ hdiutil detach "/Volumes/Pi Web"
 
 The file must be named `Pi Web-<version>-arm64.dmg` with the whole `package.json` version in it (`Pi Web-0.15.0-imp-0.1.0-arm64.dmg`), and that printed string must be only the version's numeric base — the part before the first `-` — while the chat's footer line shows the whole thing (`0.15.0-imp-0.1.0-<commit>`). A DMG reporting the previous base is a stale artifact: rebuild, do not rename. A plist carrying the whole `-imp-…` suffix means the `bundleShortVersion` override in `build-desktop.mjs` was lost; fix that, do not ship it. A DMG named without the fork version means `artifactName` was dropped from `electron-builder.yml`, and it will collide with upstream's release.
 
-That printed string must be the numeric base of `package.json`'s version — the part before the first `-` — and the chat's footer line must show the whole thing (`0.15.0-imp-0.1.0-<commit>`). A DMG reporting the previous base is a stale artifact: rebuild, do not rename. A plist carrying the whole `-imp-…` suffix means the `bundleShortVersion` override in `build-desktop.mjs` was lost; fix that, do not ship it.
-
 Build products stay out of the repository (`dist/`, `release/` are ignored). `git status --short` must stay clean.
 
 ## 4. Tag and push the tag alone
