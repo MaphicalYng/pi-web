@@ -24,6 +24,8 @@ import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { pruneBackend } from "./prune-backend.mjs";
+
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const distRoot = join(repoRoot, "dist");
 const staging = join(distRoot, "desktop");
@@ -36,6 +38,8 @@ const argv = new Set(process.argv.slice(2));
 const skipNext = argv.has("--skip-next");
 const skipPack = argv.has("--skip-pack");
 const dirOnly = argv.has("--dir");
+const noPrune = argv.has("--no-prune");
+const dropSwc = argv.has("--drop-swc");
 
 function log(message) {
   process.stdout.write(`[build-desktop] ${message}\n`);
@@ -372,6 +376,11 @@ async function main() {
   compileShell();
   await assembleApp(version);
   await assembleBackend();
+
+  if (!noPrune) {
+    const pruned = await pruneBackend(backendDir, { dropSwc });
+    log(`pruned backend: ${pruned.files} files, ${(pruned.bytes / 1024 / 1024).toFixed(1)} MB`);
+  }
 
   const check = [
     join(backendDir, "desktop", "server", "index.js"),

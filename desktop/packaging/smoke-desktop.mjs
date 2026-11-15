@@ -54,6 +54,10 @@ function checkLayout() {
     "standalone package.json": join(resources, "backend", "next-standalone", "package.json"),
     "standalone .next": join(resources, "backend", "next-standalone", ".next"),
     "standalone next": join(resources, "backend", "next-standalone", "node_modules", "next"),
+    // SIZE-1B pruning must never remove what the runtime loads.
+    "pruned keeps next-server": join(resources, "backend", "next-standalone", "node_modules", "next", "dist", "server", "next-server.js"),
+    "pruned keeps node-pty darwin prebuild": join(resources, "backend", "next-standalone", "node_modules", "node-pty", "prebuilds", "darwin-arm64"),
+    "pruned keeps sharp native": join(resources, "backend", "next-standalone", "node_modules", "@img", "sharp-darwin-arm64"),
     "shell asar": join(resources, "app.asar"),
     "main binary": join(appPath, "Contents", "MacOS", "Pi Web"),
   };
