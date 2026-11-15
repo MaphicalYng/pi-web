@@ -129,6 +129,20 @@ test("loadBackend sets the cookie, probes the page, then loads the origin", asyn
   assert.equal(manager.currentOrigin, ORIGIN);
 });
 
+test("loadBackend reports cookie-set before first-load-finished to onMark", async () => {
+  const marks = [];
+  const { manager } = makeManager({ onMark: (name) => marks.push(name) });
+  await manager.loadBackend(ORIGIN, SECRET);
+  assert.deepEqual(marks, ["cookie-set", "first-load-finished"]);
+});
+
+test("a dev-style load without a session only marks first-load-finished", async () => {
+  const marks = [];
+  const { manager } = makeManager({ onMark: (name) => marks.push(name) });
+  await manager.loadBackend(ORIGIN, null);
+  assert.deepEqual(marks, ["first-load-finished"]);
+});
+
 test("a failed first page never loads the origin and reports the failure", async () => {
   const { manager, windows, logs } = makeManager({
     probeFirstPage: async () => ({ ok: false, reachable: true, status: 500, failure: "http-status" }),

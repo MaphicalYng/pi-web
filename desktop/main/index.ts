@@ -21,6 +21,7 @@ import type { LogFn } from "./backend-supervisor";
 import { installApplicationMenu } from "./menu";
 import { installSessionGuards } from "./navigation";
 import { QuitCoordinator } from "./quit-coordinator";
+import { createStartupMarker, startupPerfEnabled } from "./startup-marks";
 import { WindowManager } from "./window-manager";
 import { DESKTOP_ENV } from "../shared/backend-protocol";
 
@@ -78,6 +79,14 @@ async function bootstrap(): Promise<void> {
     logger.log(level, event, fields ? toLogFields(fields) : undefined);
   log("info", "app.start", { packaged: app.isPackaged, version: app.getVersion() });
 
+  // MEASURE-1: phase timings, only when PI_WEB_PERF=1; one JSON field after
+  // the first page finishes loading. Marks carry no paths, origins or secrets.
+  const marker = createStartupMarker({
+    enabled: startupPerfEnabled(),
+    emit: (marks) => log("info", "startup", { marks: JSON.stringify(marks) }),
+  });
+  marker.mark("app-ready");
+
   const guiEnvironment = await resolveGuiEnvironment({
     env: process.env,
     execFile: execFileForProbe,
@@ -85,6 +94,7 @@ async function bootstrap(): Promise<void> {
       warn: (message: string) => log("warn", "environment.probe_fallback", { message }),
     },
   });
+  marker.mark("env-resolved");
 
   const preloadPath = path.join(__dirname, "..", "preload", "index.js");
   const appPath = app.getAppPath();
@@ -108,6 +118,7 @@ async function bootstrap(): Promise<void> {
       });
     },
     onLastWindowCloseRequest: (event) => controller.handleLastWindowClose(event),
+    onMark: (name) => marker.mark(name),
   });
 
   installSessionGuards(electron.session.defaultSession, { origin: () => windows.currentOrigin, log: log });
@@ -185,11 +196,22 @@ async function bootstrap(): Promise<void> {
     return fetchActivity(origin, { fetch: electron.net.fetch });
   };
 
+  // `backend-ready` is marked when the supervisor's start attempt resolves;
+  // the controller drives start/restart, so the control surface is wrapped.
+  const supervisorControl = supervisor
+    ? {
+        start: () => supervisor.start().then((ready) => (marker.mark("backend-ready"), ready)),
+        restart: () => supervisor.restart().then((ready) => (marker.mark("backend-ready"), ready)),
+        stop: () => supervisor.stop(),
+        snapshot: () => supervisor.snapshot(),
+      }
+    : null;
+
   const controller: AppController = new AppController({
     mode: app.isPackaged ? "production" : "development",
     log: log,
     windows,
-    supervisor,
+    supervisor: supervisorControl,
     development,
     readActivity,
     quit,
@@ -237,5 +259,6 @@ async function bootstrap(): Promise<void> {
 
   // A blank native window appears immediately; no page loads until ready.
   windows.ensureMainWindow();
+  marker.mark("window-created");
   await controller.start();
 }

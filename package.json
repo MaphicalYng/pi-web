@@ -47,7 +47,8 @@
     "test": "node --experimental-strip-types --test \"app/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\"",
     "release": "npm version patch -m \"Release v%s\"",
     "build:desktop": "node desktop/packaging/build-desktop.mjs",
-    "smoke:desktop": "node desktop/packaging/smoke-desktop.mjs"
+    "smoke:desktop": "node desktop/packaging/smoke-desktop.mjs",
+    "report:size": "node desktop/packaging/report-size.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.5.2",

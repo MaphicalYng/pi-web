@@ -14,6 +14,7 @@
 import type { LogFn } from "./backend-supervisor";
 import type { BackendFailure } from "./backend-supervisor";
 import type { ActivitySnapshot } from "./activity";
+import type { StartupMarkName } from "./startup-marks";
 import { APP_WINDOW_BACKGROUND, APP_WINDOW_TITLE, FATAL_TEXT_MAX_CHARS } from "./constants";
 import type { PageProbeResult } from "./http-probes";
 import { DESKTOP_SESSION_COOKIE } from "../shared/backend-protocol";
@@ -160,6 +161,8 @@ export interface WindowManagerDeps {
   /** Last window close: the entry point may preventDefault and run the quit flow. */
   onLastWindowCloseRequest?: (event: { preventDefault(): void }) => void;
   now?: () => number;
+  /** Startup timing marks (MEASURE-1); optional, no-op when absent. */
+  onMark?: (name: StartupMarkName) => void;
 }
 
 export interface QuitPromptText {
@@ -297,6 +300,7 @@ export class WindowManager {
     if (session !== null) {
       await this.deps.cookies.set(desktopCookieDetails(origin, session));
       this.deps.log("info", "window.cookie_set", { origin });
+      this.deps.onMark?.("cookie-set");
     }
     const probe = await this.deps.probeFirstPage(origin);
     if (!probe.ok) {
@@ -308,6 +312,7 @@ export class WindowManager {
     }
     const window = this.ensureMainWindow();
     await window.loadURL(origin);
+    this.deps.onMark?.("first-load-finished");
     this.deps.log("info", "window.loaded", { origin });
     return probe;
   }
