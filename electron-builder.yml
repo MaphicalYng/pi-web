@@ -28,16 +28,25 @@ directories:
 artifactName: "${productName}-${version}-${arch}.${ext}"
 
 # Only the compiled shell (main/preload/shared) is packed; the backend is
-# extraResources so it keeps real paths.
+# extraResources so it keeps real paths. The whitelist replaces the default
+# `**/*` include (package.json is added automatically), so stray files never
+# ride along and the asar stays free of node_modules (SIZE-1).
 files:
-  - "**/*"
+  - package.json
+  - main/**/*
+  - preload/**/*
+  - shared/**/*
 
 extraResources:
   - from: dist/desktop/backend
     to: backend
 
 asar: true
-npmRebuild: false
+# `beforeBuild` returning false skips install/rebuild AND marks node_modules as
+# handled externally, which turns off electron-builder's node-module collection
+# (it would otherwise pack the repo root's production tree into the asar).
+# Do not set npmRebuild: false here — it early-returns before this hook runs.
+beforeBuild: ./desktop/packaging/no-dependency-install.mjs
 buildDependenciesFromSource: false
 
 # An ad-hoc signature whose identifier matches Info.plist; macOS refuses

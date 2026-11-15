@@ -20,6 +20,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -317,6 +318,49 @@ function pack(version) {
   });
 }
 
+/**
+ * SIZE-1: the shell carries no production dependencies — the backend ships its
+ * own node_modules inside the standalone tree. electron-builder's node-module
+ * collection is off (desktop/packaging/no-dependency-install.mjs); this is the
+ * build-end assertion for it (CI: `test -d dist/desktop/app/node_modules && exit 1`).
+ */
+async function assertShellHasNoNodeModules() {
+  const stray = join(appDir, "node_modules");
+  if (existsSync(stray)) {
+    throw new Error(`shell must not carry node_modules: ${relative(repoRoot, stray)}`);
+  }
+}
+
+/** The packed asar must stay node_modules-free and keep the whitelisted shell. */
+async function assertPackedAsarClean() {
+  const releaseDir = join(repoRoot, "release");
+  let asarPath = null;
+  for (const entry of await readdir(releaseDir)) {
+    if (!entry.startsWith("mac-")) continue;
+    for (const name of await readdir(join(releaseDir, entry))) {
+      if (name.endsWith(".app")) {
+        asarPath = join(releaseDir, entry, name, "Contents", "Resources", "app.asar");
+      }
+    }
+  }
+  if (asarPath === null || !existsSync(asarPath)) {
+    throw new Error("packed app.asar not found under release/mac-*");
+  }
+  const { listPackage } = createRequire(import.meta.url)("@electron/asar");
+  // listPackage paths are rooted: "/package.json", "/main/index.js".
+  const entries = listPackage(asarPath).map((entry) => entry.replace(/^\/+/, ""));
+  const stray = entries.filter((entry) => entry === "node_modules" || entry.startsWith("node_modules/") || entry.includes("/node_modules/"));
+  if (stray.length > 0) {
+    throw new Error(`node_modules leaked into app.asar (${stray.length} entries, e.g. ${stray[0]})`);
+  }
+  for (const required of ["package.json", "main/index.js", "preload/index.js"]) {
+    if (!entries.includes(required)) {
+      throw new Error(`app.asar is missing ${required} — check the files whitelist in electron-builder.yml`);
+    }
+  }
+  log(`app.asar clean: ${entries.length} entries, no node_modules`);
+}
+
 async function main() {
   const version = (await readJson(join(repoRoot, "package.json"))).version;
   log(`Pi Web desktop ${version}`);
@@ -349,6 +393,12 @@ async function main() {
   log(`staged ${relative(repoRoot, backendDir)} and ${relative(repoRoot, appDir)}`);
 
   pack(version);
+
+  // SIZE-1: fail the build if dependency collection ever comes back.
+  await assertShellHasNoNodeModules();
+  if (!skipPack) {
+    await assertPackedAsarClean();
+  }
 
   const releaseDir = join(repoRoot, "release");
   if (existsSync(releaseDir)) {

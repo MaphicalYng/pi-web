@@ -14,6 +14,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,6 +68,25 @@ function checkLayout() {
     existsSync(join(resources, "app.asar.unpacked", "backend")) ? "backend leaked into asar.unpacked" : "extraResources",
   );
   return resources;
+}
+
+/**
+ * SIZE-1: the asar is the compiled shell only — no node_modules may ride along
+ * (electron-builder's node-module collection is off via the beforeBuild hook),
+ * and the files whitelist must keep the shell entry points in place.
+ */
+function checkAsarClean(resources) {
+  const { listPackage } = createRequire(import.meta.url)("@electron/asar");
+  // listPackage paths are rooted: "/package.json", "/main/index.js".
+  const entries = listPackage(join(resources, "app.asar")).map((entry) => entry.replace(/^\/+/, ""));
+  const stray = entries.filter((entry) => entry === "node_modules" || entry.startsWith("node_modules/") || entry.includes("/node_modules/"));
+  record(
+    "asar without node_modules",
+    stray.length === 0,
+    stray.length === 0 ? `${entries.length} entries` : `${stray.length} entries leaked, e.g. ${stray[0]}`,
+  );
+  const missing = ["package.json", "main/index.js", "preload/index.js"].filter((entry) => !entries.includes(entry));
+  record("asar shell files", missing.length === 0, missing.length ? `missing ${missing.join(", ")}` : "whitelist kept the shell");
 }
 
 function checkNative(resources) {
@@ -233,6 +253,7 @@ async function main() {
     process.exit(2);
   }
   const resources = checkLayout();
+  checkAsarClean(resources);
   await checkNative(resources);
   await checkData();
   await launch();
