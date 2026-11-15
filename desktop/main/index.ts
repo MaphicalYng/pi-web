@@ -22,6 +22,7 @@ import { installApplicationMenu } from "./menu";
 import { installSessionGuards } from "./navigation";
 import { QuitCoordinator } from "./quit-coordinator";
 import { createStartupMarker, startupPerfEnabled } from "./startup-marks";
+import { probeBehindWindow } from "./startup-order";
 import { WindowManager } from "./window-manager";
 import { DESKTOP_ENV } from "../shared/backend-protocol";
 
@@ -87,14 +88,15 @@ async function bootstrap(): Promise<void> {
   });
   marker.mark("app-ready");
 
-  const guiEnvironment = await resolveGuiEnvironment({
-    env: process.env,
-    execFile: execFileForProbe,
-    logger: {
-      warn: (message: string) => log("warn", "environment.probe_fallback", { message }),
-    },
+  // START-1: startup runs window → environment probe → controller, so the
+  // blank window is up while the login-shell probe is pending. A quit (or the
+  // window closing) can begin while the probe runs: the close callback checks
+  // the controller binding before use, and the probe outcome carries the race.
+  const controllerRef: { current: AppController | null } = { current: null };
+  let quitStarted = false;
+  app.on("before-quit", () => {
+    quitStarted = true;
   });
-  marker.mark("env-resolved");
 
   const preloadPath = path.join(__dirname, "..", "preload", "index.js");
   const appPath = app.getAppPath();
@@ -117,11 +119,38 @@ async function bootstrap(): Promise<void> {
         });
       });
     },
-    onLastWindowCloseRequest: (event) => controller.handleLastWindowClose(event),
+    onLastWindowCloseRequest: (event) => {
+      if (controllerRef.current) controllerRef.current.handleLastWindowClose(event);
+    },
     onMark: (name) => marker.mark(name),
   });
 
   installSessionGuards(electron.session.defaultSession, { origin: () => windows.currentOrigin, log: log });
+
+  // A blank native window appears immediately; no page loads until ready.
+  const probed = await probeBehindWindow({
+    showWindow: () => {
+      windows.ensureMainWindow();
+      marker.mark("window-created");
+    },
+    resolveEnvironment: async () => {
+      const environment = await resolveGuiEnvironment({
+        env: process.env,
+        execFile: execFileForProbe,
+        logger: {
+          warn: (message: string) => log("warn", "environment.probe_fallback", { message }),
+        },
+      });
+      marker.mark("env-resolved");
+      return environment;
+    },
+    quitStarted: () => quitStarted,
+  });
+  if (!probed.ok) {
+    log("info", "app.startup_aborted", { stage: "environment-probe" });
+    return;
+  }
+  const guiEnvironment = probed.environment;
 
   const backendEnvironment = (): Record<string, string> => ({
     ...guiEnvironment,
@@ -217,6 +246,7 @@ async function bootstrap(): Promise<void> {
     quit,
     openLogs: () => openLogsDirectory(logDirectory, (target) => electron.shell.openPath(target)),
   });
+  controllerRef.current = controller;
 
   installApplicationMenu({
     Menu: electron.Menu,
@@ -257,8 +287,5 @@ async function bootstrap(): Promise<void> {
     });
   }
 
-  // A blank native window appears immediately; no page loads until ready.
-  windows.ensureMainWindow();
-  marker.mark("window-created");
   await controller.start();
 }
